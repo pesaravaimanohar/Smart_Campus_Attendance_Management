@@ -195,4 +195,14 @@ export const getAdminStats = async () => {
     return response.data;
 };
 
+export const resetAllUsers = async () => {
+    const response = await api.post("/admin/users/reset-first-login");
+    return response.data;
+};
+
+export const changePassword = async (oldPassword, newPassword) => {
+    const response = await api.post("/users/change-password", { oldPassword, newPassword });
+    return response.data;
+};
+
 export default api;

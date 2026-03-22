@@ -3,6 +3,7 @@ package com.college.smartattendance.service;
 import com.college.smartattendance.dto.ClassDto;
 import com.college.smartattendance.dto.StatsDto;
 import com.college.smartattendance.entity.CourseClass;
+import com.college.smartattendance.entity.User;
 import com.college.smartattendance.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,18 @@ public class AdminService {
     private SubjectRepository subjectRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private AttendanceSessionRepository sessionRepository;
+
+    public void resetAllUsersToFirstLogin() {
+        List<User> users = userRepository.findAll();
+        for (User user : users) {
+            user.setFirstLogin(true);
+        }
+        userRepository.saveAll(users);
+    }
 
     public CourseClass createClass(ClassDto classDto) {
         CourseClass courseClass = new CourseClass();

@@ -9,6 +9,7 @@ import FacultyDashboard from "./pages/FacultyDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import HODDashboard from "./pages/HODDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
+import ChangePassword from "./pages/ChangePassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 const App = () => {
@@ -20,6 +21,7 @@ const App = () => {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Login />} />
+            <Route path="/change-password" element={<ChangePassword />} />
 
             <Route
               path="/student"

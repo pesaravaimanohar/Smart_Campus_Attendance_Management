@@ -84,4 +84,15 @@ public class AdminController {
                     "message", "Failed to delete class: " + e.getMessage()));
         }
     }
+
+    @PostMapping("/users/reset-first-login")
+    public ResponseEntity<?> resetFirstLogin() {
+        try {
+            adminService.resetAllUsersToFirstLogin();
+            return ResponseEntity.ok(Map.of("message", "All users reset to first login status"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Failed to reset users: " + e.getMessage()));
+        }
+    }
 }

@@ -18,8 +18,19 @@ public class UserService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    public void changePassword(String username, String newPassword) {
-        User user = userRepository.findByUsername(username).orElseThrow();
+    public void changePassword(String username, String oldPassword, String newPassword) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify old password
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new RuntimeException("Incorrect current password");
+        }
+
+        // Check for reuse
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new RuntimeException("New password cannot be the same as the current password");
+        }
+
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setFirstLogin(false);
         userRepository.save(user);
