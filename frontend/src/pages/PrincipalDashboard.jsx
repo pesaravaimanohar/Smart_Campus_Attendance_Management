@@ -21,6 +21,8 @@ import {
 } from '@mui/icons-material';
 
 import ChangePasswordDialog from '../components/ChangePasswordDialog';
+// ThemeToggle removed
+import GlobalHeader from '../components/GlobalHeader';
 
 const PrincipalDashboard = () => {
     const { logout, user } = useAuth();
@@ -97,253 +99,257 @@ const PrincipalDashboard = () => {
     );
 
     return (
-        <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
-            {/* Sidebar */}
-            <Paper
-                elevation={3}
-                sx={{
-                    width: showSidebar ? 280 : 0,
-                    borderRight: '1px solid',
-                    borderColor: 'divider',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    transition: 'width 0.3s ease',
-                    overflow: 'hidden',
-                    zIndex: 1200,
-                    position: { xs: 'absolute', md: 'relative' },
-                    height: '100%'
-                }}
-            >
-                <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-                    <ApartmentIcon sx={{ fontSize: 32, color: 'secondary.main' }} />
-                    <Box>
-                        <Typography variant="h6" fontWeight="800" color="text.primary" lineHeight={1.2}>PRINCIPAL</Typography>
-                        <Typography variant="caption" color="text.secondary" fontWeight="600">Executive View</Typography>
-                    </Box>
-                </Box>
-
-                <Box sx={{ flexGrow: 1, mt: 3 }}>
-                    <SidebarItem icon={<DashboardIcon />} label="Overview" value="overview" />
-                    <SidebarItem icon={<BusinessIcon />} label="Departments" value="departments" />
-                    <SidebarItem icon={<AssignmentIcon />} label="Reports" value="reports" />
-                </Box>
-
-                <Box sx={{ p: 3, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
-                    <Box display="flex" alignItems="center" gap={2} mb={2}>
-                        <Avatar
-                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=PrincipalUser`}
-                            sx={{ width: 48, height: 48, border: '2px solid', borderColor: 'secondary.main' }}
-                        />
-                        <Box overflow="hidden">
-                            <Typography variant="subtitle2" fontWeight="bold" noWrap>{user?.username || 'Principal'}</Typography>
-                            <Typography variant="caption" color="text.secondary">Administrator</Typography>
-                        </Box>
-                    </Box>
-                    <Box display="flex" gap={1}>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            color="inherit"
-                            onClick={() => setOpenChangePassword(true)}
-                            fullWidth
-                            sx={{ borderRadius: 2 }}
-                        >
-                            Pass
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            onClick={logout}
-                            startIcon={<LogoutIcon />}
-                            fullWidth
-                            sx={{ borderRadius: 2 }}
-                        >
-                            Logout
-                        </Button>
-                    </Box>
-                </Box>
-            </Paper>
-
-            <ChangePasswordDialog open={openChangePassword} onClose={() => setOpenChangePassword(false)} />
-
-            {/* Main Content */}
-            <Box sx={{ flexGrow: 1, overflow: 'auto', p: 0, position: 'relative' }}>
-                {/* AppBar */}
-                <Box sx={{
-                    p: 2, px: 4, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    position: 'sticky', top: 0, zIndex: 1100
-                }}>
-                    <Box display="flex" alignItems="center" gap={2}>
-                        <IconButton onClick={() => setShowSidebar(!showSidebar)} color="primary">
-                            <MenuIcon />
-                        </IconButton>
-                        <Typography variant="h6" fontWeight="800" color="text.primary">
-                            {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
-                        </Typography>
-                    </Box>
-                    <Box display="flex" alignItems="center" gap={2}>
-                        <TextField
-                            placeholder="Search..."
-                            size="small"
-                            InputProps={{
-                                startAdornment: <SearchIcon color="action" sx={{ mr: 1, fontSize: 20 }} />,
-                                sx: { borderRadius: 4, bgcolor: 'grey.50', '& fieldset': { border: 'none' }, minWidth: 200 }
-                            }}
-                        />
-                        <IconButton color="primary">
-                            <NotificationsIcon />
-                        </IconButton>
-                    </Box>
-                </Box>
-
-                <Container maxWidth="xl" sx={{ py: 4 }}>
-                    <Fade in timeout={500}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
+            <GlobalHeader />
+            <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+                {/* Sidebar */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        width: showSidebar ? 280 : 0,
+                        borderRight: '1px solid',
+                        borderColor: 'divider',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        transition: 'width 0.3s ease',
+                        overflow: 'hidden',
+                        zIndex: 1200,
+                        position: { xs: 'absolute', md: 'relative' },
+                        height: '100%'
+                    }}
+                >
+                    <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                        <ApartmentIcon sx={{ fontSize: 32, color: 'secondary.main' }} />
                         <Box>
-                            {/* VIEW: OVERVIEW */}
-                            {activeSection === 'overview' && (
-                                <Grid container spacing={4}>
-                                    {/* Stats Cards */}
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <StatCard
-                                            title="Attendance Rate"
-                                            value="78%"
-                                            icon={<TimelineIcon />}
-                                            color="#7e57c2"
-                                            trend="+2.5% vs last week"
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <StatCard
-                                            title="Active Sessions"
-                                            value="15"
-                                            icon={<DashboardIcon />}
-                                            color="#29b6f6"
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <StatCard
-                                            title="Faculty Present"
-                                            value="45/50"
-                                            icon={<SchoolIcon />}
-                                            color="#ffa726"
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6} md={3}>
-                                        <StatCard
-                                            title="Critical Alerts"
-                                            value="2"
-                                            icon={<WarningIcon />}
-                                            color="#ef5350"
-                                        />
-                                    </Grid>
-
-                                    {/* Charts Section */}
-                                    <Grid item xs={12} md={8}>
-                                        <Card sx={{ borderRadius: 4, p: 3, height: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                                            <Box display="flex" alignItems="center" justifyContent="space-between" mb={4}>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Avatar sx={{ bgcolor: 'secondary.50', color: 'secondary.main', width: 32, height: 32 }}>
-                                                        <TimelineIcon fontSize="small" />
-                                                    </Avatar>
-                                                    <Typography variant="h6" fontWeight="bold">College Attendance Trends</Typography>
-                                                </Box>
-                                                <Button size="small" variant="outlined" sx={{ borderRadius: 4 }}>Full Report</Button>
-                                            </Box>
-
-                                            {/* CSS Bar Chart */}
-                                            <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: 300, px: 2, pt: 2, bgcolor: 'grey.50', borderRadius: 3 }}>
-                                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => {
-                                                    const height = [65, 78, 85, 72, 80, 60][i];
-                                                    return (
-                                                        <Box key={i} display="flex" flexDirection="column" alignItems="center" width="10%">
-                                                            <Box
-                                                                sx={{
-                                                                    width: '100%',
-                                                                    height: `${height * 3}px`,
-                                                                    background: 'linear-gradient(180deg, #d1c4e9 0%, #7e57c2 100%)',
-                                                                    borderRadius: '8px 8px 0 0',
-                                                                    position: 'relative',
-                                                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                                    '&:hover': {
-                                                                        transform: 'scaleY(1.05)',
-                                                                        boxShadow: '0 4px 15px rgba(126, 87, 194, 0.4)'
-                                                                    },
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                            >
-                                                                <Tooltip title={`${height}% Coverage`}>
-                                                                    <Box sx={{ width: '100%', height: '100%' }} />
-                                                                </Tooltip>
-                                                            </Box>
-                                                            <Typography variant="caption" sx={{ mt: 1.5, fontWeight: 700, color: 'text.secondary' }}>
-                                                                {day}
-                                                            </Typography>
-                                                        </Box>
-                                                    );
-                                                })}
-                                            </Box>
-                                        </Card>
-                                    </Grid>
-
-                                    <Grid item xs={12} md={4}>
-                                        <Card sx={{ borderRadius: 4, p: 3, height: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                                            <Box display="flex" alignItems="center" gap={1} mb={4}>
-                                                <Avatar sx={{ bgcolor: 'secondary.50', color: 'secondary.main', width: 32, height: 32 }}>
-                                                    <BusinessIcon fontSize="small" />
-                                                </Avatar>
-                                                <Typography variant="h6" fontWeight="bold">Dept. Performance</Typography>
-                                            </Box>
-
-                                            <Box mt={2}>
-                                                {[
-                                                    { name: 'Computer Science', val: 85, color: 'success' },
-                                                    { name: 'Electronics', val: 72, color: 'warning' },
-                                                    { name: 'Mechanical', val: 65, color: 'error' },
-                                                    { name: 'Civil', val: 78, color: 'info' }
-                                                ].map((dept, i) => (
-                                                    <Box key={i} sx={{ mb: 4 }}>
-                                                        <Box display="flex" justifyContent="space-between" mb={1}>
-                                                            <Typography variant="subtitle2" fontWeight="700">{dept.name}</Typography>
-                                                            <Typography variant="subtitle2" color={`${dept.color}.main`}>{dept.val}%</Typography>
-                                                        </Box>
-                                                        <LinearProgress
-                                                            variant="determinate"
-                                                            value={dept.val}
-                                                            color={dept.color}
-                                                            sx={{ height: 8, borderRadius: 4, bgcolor: `${dept.color}.50` }}
-                                                        />
-                                                    </Box>
-                                                ))}
-                                            </Box>
-                                        </Card>
-                                    </Grid>
-                                </Grid>
-                            )}
-
-                            {activeSection !== 'overview' && (
-                                <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
-                                    <Box
-                                        sx={{
-                                            width: 120,
-                                            height: 120,
-                                            bgcolor: 'grey.100',
-                                            borderRadius: '50%',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            mb: 2
-                                        }}
-                                    >
-                                        <DashboardIcon sx={{ fontSize: 60, color: 'text.disabled' }} />
-                                    </Box>
-                                    <Typography variant="h6" color="text.secondary">Section Under Development</Typography>
-                                </Box>
-                            )}
+                            <Typography variant="h6" fontWeight="800" color="text.primary" lineHeight={1.2}>PRINCIPAL</Typography>
+                            <Typography variant="caption" color="text.secondary" fontWeight="600">Executive View</Typography>
                         </Box>
-                    </Fade>
-                </Container>
+                    </Box>
+
+                    <Box sx={{ flexGrow: 1, mt: 3 }}>
+                        <SidebarItem icon={<DashboardIcon />} label="Overview" value="overview" />
+                        <SidebarItem icon={<BusinessIcon />} label="Departments" value="departments" />
+                        <SidebarItem icon={<AssignmentIcon />} label="Reports" value="reports" />
+                    </Box>
+
+                    <Box sx={{ p: 3, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
+                        <Box display="flex" alignItems="center" gap={2} mb={2}>
+                            <Avatar
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=PrincipalUser`}
+                                sx={{ width: 48, height: 48, border: '2px solid', borderColor: 'secondary.main' }}
+                            />
+                            <Box overflow="hidden">
+                                <Typography variant="subtitle2" fontWeight="bold" noWrap>{user?.username || 'Principal'}</Typography>
+                                <Typography variant="caption" color="text.secondary">Administrator</Typography>
+                            </Box>
+                        </Box>
+                        <Box display="flex" gap={1}>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                color="inherit"
+                                onClick={() => setOpenChangePassword(true)}
+                                fullWidth
+                                sx={{ borderRadius: 2 }}
+                            >
+                                Pass
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={logout}
+                                startIcon={<LogoutIcon />}
+                                fullWidth
+                                sx={{ borderRadius: 2 }}
+                            >
+                                Logout
+                            </Button>
+                        </Box>
+                    </Box>
+                </Paper>
+
+                <ChangePasswordDialog open={openChangePassword} onClose={() => setOpenChangePassword(false)} />
+
+                {/* Main Content */}
+                <Box sx={{ flexGrow: 1, overflow: 'auto', p: 0, position: 'relative' }}>
+                    {/* AppBar */}
+                    <Box sx={{
+                        p: 2, px: 4, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        position: 'sticky', top: 0, zIndex: 1100
+                    }}>
+                        <Box display="flex" alignItems="center" gap={2}>
+                            <IconButton onClick={() => setShowSidebar(!showSidebar)} color="primary">
+                                <MenuIcon />
+                            </IconButton>
+                            <Typography variant="h6" fontWeight="800" color="text.primary">
+                                {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
+                            </Typography>
+                        </Box>
+                        <Box display="flex" alignItems="center" gap={2}>
+                            <TextField
+                                placeholder="Search..."
+                                size="small"
+                                InputProps={{
+                                    startAdornment: <SearchIcon color="action" sx={{ mr: 1, fontSize: 20 }} />,
+                                    sx: { borderRadius: 4, bgcolor: 'grey.50', '& fieldset': { border: 'none' }, minWidth: 200 }
+                                }}
+                            />
+                            {/* ThemeToggle removed */}
+                            <IconButton color="primary">
+                                <NotificationsIcon />
+                            </IconButton>
+                        </Box>
+                    </Box>
+
+                    <Container maxWidth="xl" sx={{ py: 4 }}>
+                        <Fade in timeout={500}>
+                            <Box>
+                                {/* VIEW: OVERVIEW */}
+                                {activeSection === 'overview' && (
+                                    <Grid container spacing={4}>
+                                        {/* Stats Cards */}
+                                        <Grid item xs={12} sm={6} md={3}>
+                                            <StatCard
+                                                title="Attendance Rate"
+                                                value="78%"
+                                                icon={<TimelineIcon />}
+                                                color="#7e57c2"
+                                                trend="+2.5% vs last week"
+                                            />
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                            <StatCard
+                                                title="Active Sessions"
+                                                value="15"
+                                                icon={<DashboardIcon />}
+                                                color="#29b6f6"
+                                            />
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                            <StatCard
+                                                title="Faculty Present"
+                                                value="45/50"
+                                                icon={<SchoolIcon />}
+                                                color="#ffa726"
+                                            />
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                            <StatCard
+                                                title="Critical Alerts"
+                                                value="2"
+                                                icon={<WarningIcon />}
+                                                color="#ef5350"
+                                            />
+                                        </Grid>
+
+                                        {/* Charts Section */}
+                                        <Grid item xs={12} md={8}>
+                                            <Card sx={{ borderRadius: 4, p: 3, height: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                                                <Box display="flex" alignItems="center" justifyContent="space-between" mb={4}>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <Avatar sx={{ bgcolor: 'secondary.50', color: 'secondary.main', width: 32, height: 32 }}>
+                                                            <TimelineIcon fontSize="small" />
+                                                        </Avatar>
+                                                        <Typography variant="h6" fontWeight="bold">College Attendance Trends</Typography>
+                                                    </Box>
+                                                    <Button size="small" variant="outlined" sx={{ borderRadius: 4 }}>Full Report</Button>
+                                                </Box>
+
+                                                {/* CSS Bar Chart */}
+                                                <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: 300, px: 2, pt: 2, bgcolor: 'grey.50', borderRadius: 3 }}>
+                                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => {
+                                                        const height = [65, 78, 85, 72, 80, 60][i];
+                                                        return (
+                                                            <Box key={i} display="flex" flexDirection="column" alignItems="center" width="10%">
+                                                                <Box
+                                                                    sx={{
+                                                                        width: '100%',
+                                                                        height: `${height * 3}px`,
+                                                                        background: 'linear-gradient(180deg, #d1c4e9 0%, #7e57c2 100%)',
+                                                                        borderRadius: '8px 8px 0 0',
+                                                                        position: 'relative',
+                                                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                                        '&:hover': {
+                                                                            transform: 'scaleY(1.05)',
+                                                                            boxShadow: '0 4px 15px rgba(126, 87, 194, 0.4)'
+                                                                        },
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    <Tooltip title={`${height}% Coverage`}>
+                                                                        <Box sx={{ width: '100%', height: '100%' }} />
+                                                                    </Tooltip>
+                                                                </Box>
+                                                                <Typography variant="caption" sx={{ mt: 1.5, fontWeight: 700, color: 'text.secondary' }}>
+                                                                    {day}
+                                                                </Typography>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </Box>
+                                            </Card>
+                                        </Grid>
+
+                                        <Grid item xs={12} md={4}>
+                                            <Card sx={{ borderRadius: 4, p: 3, height: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                                                <Box display="flex" alignItems="center" gap={1} mb={4}>
+                                                    <Avatar sx={{ bgcolor: 'secondary.50', color: 'secondary.main', width: 32, height: 32 }}>
+                                                        <BusinessIcon fontSize="small" />
+                                                    </Avatar>
+                                                    <Typography variant="h6" fontWeight="bold">Dept. Performance</Typography>
+                                                </Box>
+
+                                                <Box mt={2}>
+                                                    {[
+                                                        { name: 'Computer Science', val: 85, color: 'success' },
+                                                        { name: 'Electronics', val: 72, color: 'warning' },
+                                                        { name: 'Mechanical', val: 65, color: 'error' },
+                                                        { name: 'Civil', val: 78, color: 'info' }
+                                                    ].map((dept, i) => (
+                                                        <Box key={i} sx={{ mb: 4 }}>
+                                                            <Box display="flex" justifyContent="space-between" mb={1}>
+                                                                <Typography variant="subtitle2" fontWeight="700">{dept.name}</Typography>
+                                                                <Typography variant="subtitle2" color={`${dept.color}.main`}>{dept.val}%</Typography>
+                                                            </Box>
+                                                            <LinearProgress
+                                                                variant="determinate"
+                                                                value={dept.val}
+                                                                color={dept.color}
+                                                                sx={{ height: 8, borderRadius: 4, bgcolor: `${dept.color}.50` }}
+                                                            />
+                                                        </Box>
+                                                    ))}
+                                                </Box>
+                                            </Card>
+                                        </Grid>
+                                    </Grid>
+                                )}
+
+                                {activeSection !== 'overview' && (
+                                    <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
+                                        <Box
+                                            sx={{
+                                                width: 120,
+                                                height: 120,
+                                                bgcolor: 'grey.100',
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                mb: 2
+                                            }}
+                                        >
+                                            <DashboardIcon sx={{ fontSize: 60, color: 'text.disabled' }} />
+                                        </Box>
+                                        <Typography variant="h6" color="text.secondary">Section Under Development</Typography>
+                                    </Box>
+                                )}
+                            </Box>
+                        </Fade>
+                    </Container>
+                </Box>
             </Box>
         </Box>
     );

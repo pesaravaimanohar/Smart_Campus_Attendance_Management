@@ -2,10 +2,11 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import Webcam from "react-webcam";
 import {
     Container, Typography, Button, Box, Paper, CircularProgress, AppBar, Toolbar,
-    IconButton, Grid, Card, CardContent, Chip, Select, MenuItem, FormControl,
-    InputLabel, Avatar, Divider, List, ListItem, ListItemText, Skeleton, Fab,
-    useTheme, Fade, Zoom, Dialog, LinearProgress, Badge, Tooltip, Drawer
+    IconButton, Grid, Card, CardContent, Table, TableBody, TableCell, TableContainer,
+    TableHead, TableRow, Chip, Avatar, Divider, List, ListItem, ListItemText,
+    useTheme, Fade, Dialog, LinearProgress, Badge, Drawer, Alert, Stack
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import {
     markAttendance, getStudentAnalytics, getStudentSubjects, getSubjectAttendance,
@@ -23,14 +24,19 @@ import {
     History as HistoryIcon,
     Notifications as NotificationsIcon,
     Person as PersonIcon,
-    Warning as WarningIcon,
     TrendingUp as TrendingUpIcon,
-    AccessTime as AccessTimeIcon,
-    Close as CloseIcon
+    Close as CloseIcon,
+    Download as DownloadIcon,
+    Description as DescriptionIcon,
+    ReportProblem as ReportProblemIcon,
+    ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 
 import { useAuth } from "../context/AuthContext";
 import ChangePasswordDialog from '../components/ChangePasswordDialog';
+import GlobalHeader from '../components/GlobalHeader';
+import UserProfileMenu from '../components/UserProfileMenu';
+import GreetingWidget from '../components/GreetingWidget';
 
 const StudentDashboard = () => {
     const { logout, user } = useAuth();
@@ -41,8 +47,8 @@ const StudentDashboard = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
     const [openChangePassword, setOpenChangePassword] = useState(false);
-    const [loading, setLoading] = useState(false); // Action loading
-    const [dataLoading, setDataLoading] = useState(true); // Initial data loading
+    const [loading, setLoading] = useState(false);
+    const [dataLoading, setDataLoading] = useState(true);
 
     // Scanner State
     const [scanResult, setScanResult] = useState(null);
@@ -60,7 +66,6 @@ const StudentDashboard = () => {
     const [subjects, setSubjects] = useState([]);
 
     useEffect(() => {
-        // Get Location immediately
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -82,7 +87,7 @@ const StudentDashboard = () => {
                 getStudentAnalytics(),
                 getAttendanceStatus(),
                 getTodaySessions(),
-                getAttendanceHistory(10), // Fetch more history
+                getAttendanceHistory(10),
                 getStudentAlerts(),
                 getStudentSubjects()
             ]);
@@ -102,9 +107,24 @@ const StudentDashboard = () => {
 
     // Scanner Logic
     useEffect(() => {
+        let scanner = null;
+        let timer = null;
+
         if (showScanner && !scanResult) {
-            const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
-            scanner.render(onScanSuccess, onScanFailure);
+            const initScanner = () => {
+                if (document.getElementById("reader")) {
+                    try {
+                        scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+                        scanner.render(onScanSuccess, onScanFailure);
+                    } catch (e) {
+                        console.error("Scanner init error:", e);
+                    }
+                } else {
+                    timer = setTimeout(initScanner, 300);
+                }
+            };
+
+            timer = setTimeout(initScanner, 200);
 
             function onScanSuccess(decodedText) {
                 let sessionId = decodedText;
@@ -112,17 +132,22 @@ const StudentDashboard = () => {
                     sessionId = decodedText.split(":")[1];
                 }
                 setScanResult(sessionId);
-                scanner.clear();
+                if (scanner) {
+                    scanner.clear().catch(e => console.warn("Failed to clear scanner", e));
+                }
             }
 
             function onScanFailure(error) {
-                // console.warn(error);
+                // Silent
             }
-
-            return () => {
-                scanner.clear().catch(e => console.error("Failed to clear scanner", e));
-            };
         }
+
+        return () => {
+            if (timer) clearTimeout(timer);
+            if (scanner) {
+                scanner.clear().catch(e => console.warn("Failed to clear scanner on cleanup", e));
+            }
+        };
     }, [showScanner, scanResult]);
 
     const capture = useCallback(() => {
@@ -165,18 +190,31 @@ const StudentDashboard = () => {
         }
     };
 
-    // Components
+    // Helper to get status badge
+    const getStatusBadge = (percentage) => {
+        if (percentage >= 75) return { label: "Safe", color: "success" };
+        if (percentage >= 65) return { label: "At Risk", color: "warning" };
+        return { label: "Critical", color: "error" };
+    };
+
+    const status = getStatusBadge(analytics?.percentage || 0);
+
+    // Sidebar
     const SidebarContent = () => (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'white' }}>
-            <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-                <SchoolIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-                <Box>
-                    <Typography variant="h6" fontWeight="800" lineHeight={1.2}>JNTUA</Typography>
-                    <Typography variant="caption" color="text.secondary" fontWeight="600">Student Portal</Typography>
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
+            {/* Header */}
+            <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                    <SchoolIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+                    <Box>
+                        <Typography variant="subtitle1" fontWeight="700" lineHeight={1.2}>JNTUA CE</Typography>
+                        <Typography variant="caption" color="text.secondary">Student Portal</Typography>
+                    </Box>
                 </Box>
             </Box>
 
-            <List sx={{ flexGrow: 1, px: 2, py: 3 }}>
+            {/* Navigation */}
+            <List sx={{ flexGrow: 1, px: 2, py: 2 }}>
                 {[
                     { id: 'dashboard', icon: <DashboardIcon />, label: 'Dashboard' },
                     { id: 'classes', icon: <CalendarIcon />, label: 'My Classes' },
@@ -188,29 +226,35 @@ const StudentDashboard = () => {
                         key={item.id}
                         onClick={() => { setActiveSection(item.id); setSidebarOpen(false); }}
                         sx={{
-                            borderRadius: 3,
-                            mb: 1,
-                            bgcolor: activeSection === item.id ? 'primary.main' : 'transparent',
-                            color: activeSection === item.id ? 'white' : 'text.primary',
-                            '&:hover': { bgcolor: activeSection === item.id ? 'primary.dark' : 'grey.100' }
+                            borderRadius: 2,
+                            mb: 0.5,
+                            bgcolor: activeSection === item.id ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                            color: activeSection === item.id ? 'primary.main' : 'text.secondary',
+                            '&:hover': { bgcolor: activeSection === item.id ? alpha(theme.palette.primary.main, 0.15) : 'action.hover' }
                         }}
                     >
-                        <Box component="span" sx={{ mr: 2, display: 'flex', color: activeSection === item.id ? 'white' : 'text.secondary' }}>
+                        <Box component="span" sx={{ mr: 1.5, display: 'flex' }}>
                             {item.icon}
                         </Box>
-                        <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: 600 }} />
+                        <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: activeSection === item.id ? 700 : 500 }} />
                     </ListItem>
                 ))}
             </List>
 
-            <Box sx={{ p: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+            {/* Footer */}
+            <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Button
                     fullWidth
-                    variant="outlined"
-                    color="error"
+                    variant="text"
+                    color="inherit"
+                    size="small"
                     startIcon={<LogoutIcon />}
                     onClick={logout}
-                    sx={{ borderRadius: 3, fontWeight: 'bold' }}
+                    sx={{
+                        justifyContent: 'flex-start',
+                        color: 'text.secondary',
+                        '&:hover': { bgcolor: 'action.hover' }
+                    }}
                 >
                     Logout
                 </Button>
@@ -219,335 +263,388 @@ const StudentDashboard = () => {
     );
 
     return (
-        <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f4f6f9' }}>
-            {/* Desktop Sidebar */}
-            <Box sx={{ width: 280, display: { xs: 'none', md: 'block' }, borderRight: '1px solid', borderColor: 'divider' }}>
-                <SidebarContent />
-            </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#fafafa' }}>
+            <GlobalHeader />
+            <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+                {/* Desktop Sidebar */}
+                <Box sx={{ width: 240, display: { xs: 'none', md: 'block' }, bgcolor: 'background.paper', borderRight: '1px solid', borderColor: 'divider' }}>
+                    <SidebarContent />
+                </Box>
 
-            {/* Mobile Sidebar */}
-            <Drawer
-                anchor="left"
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                PaperProps={{ sx: { width: 280 } }}
-            >
-                <SidebarContent />
-            </Drawer>
+                {/* Mobile Sidebar */}
+                <Drawer
+                    anchor="left"
+                    open={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                    PaperProps={{ sx: { width: 240 } }}
+                >
+                    <SidebarContent />
+                </Drawer>
 
-            {/* Main Content */}
-            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+                {/* Main Content */}
+                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-                {/* Header */}
-                <AppBar position="sticky" elevation={0} sx={{ bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider', color: 'text.primary' }}>
-                    <Toolbar>
-                        <IconButton edge="start" sx={{ mr: 2, display: { md: 'none' } }} onClick={() => setSidebarOpen(true)}>
-                            <MenuIcon />
-                        </IconButton>
-                        <Typography variant="h6" fontWeight="800" sx={{ flexGrow: 1, color: 'primary.main' }}>
-                            {activeSection === 'dashboard' ? 'Overview' : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
-                        </Typography>
-                        <Box>
-                            <IconButton size="large" sx={{ mr: 1 }}>
-                                <Badge badgeContent={alerts.length} color="error">
-                                    <NotificationsIcon />
-                                </Badge>
+                    {/* Top Header - Slim & Clean */}
+                    <AppBar position="static" elevation={0} sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+                        <Toolbar sx={{ minHeight: 64 }}>
+                            <IconButton edge="start" sx={{ mr: 2, display: { md: 'none' } }} onClick={() => setSidebarOpen(true)}>
+                                <MenuIcon />
                             </IconButton>
-                            <Tooltip title="Change Password">
-                                <IconButton onClick={() => setOpenChangePassword(true)}>
-                                    <PersonIcon />
+                            <Typography variant="h6" sx={{ flexGrow: 1, color: 'text.primary', fontWeight: 700 }}>
+                                Dashboard
+                            </Typography>
+                            <Box display="flex" alignItems="center" gap={1}>
+                                <IconButton size="medium">
+                                    <Badge badgeContent={alerts.length} color="error">
+                                        <NotificationsIcon />
+                                    </Badge>
                                 </IconButton>
-                            </Tooltip>
-                        </Box>
-                    </Toolbar>
-                </AppBar>
+                                <UserProfileMenu size={36} />
+                            </Box>
+                        </Toolbar>
+                    </AppBar>
 
-                <Box sx={{ flexGrow: 1, overflow: 'auto', p: { xs: 2, md: 4 } }}>
-                    <Container maxWidth="xl" disableGutters>
-                        <Fade in timeout={500}>
-                            <Box>
-                                {/* DASHBOARD SECTION */}
-                                {activeSection === 'dashboard' && (
-                                    <Grid container spacing={3}>
-                                        {/* Welcome Banner */}
-                                        <Grid item xs={12}>
-                                            <Paper sx={{
-                                                p: 4,
-                                                borderRadius: 4,
-                                                bgcolor: 'primary.main',
-                                                color: 'white',
-                                                backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
-                                                flexWrap: 'wrap',
-                                                gap: 2,
-                                                boxShadow: '0 10px 20px rgba(118, 75, 162, 0.4)'
-                                            }}>
-                                                <Box>
-                                                    <Typography variant="h4" fontWeight="800">Welcome Back, {user?.username}!</Typography>
-                                                    <Typography variant="body1" sx={{ opacity: 0.9, mt: 1 }}>
-                                                        You have {todaySessions.filter(s => s.status === 'Open').length} classes available for attendance right now.
+                    {/* Main Content Area */}
+                    <Box sx={{ flexGrow: 1, overflow: 'auto', p: { xs: 2, md: 4 } }}>
+                        <Container maxWidth="xl" disableGutters>
+                            {activeSection === 'dashboard' && (
+                                <Stack spacing={3}>
+                                    {/* Greeting Widget */}
+                                    <GreetingWidget />
+
+                                    {/* 1. ATTENDANCE OVERVIEW - Hero Section */}
+                                    <Paper elevation={0} sx={{
+                                        p: 3,
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        bgcolor: 'background.paper'
+                                    }}>
+                                        <Grid container spacing={3} alignItems="center">
+                                            <Grid item xs={12} md={6}>
+                                                <Typography variant="overline" color="text.secondary" fontWeight={600}>
+                                                    Attendance Overview
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mt: 1, mb: 2 }}>
+                                                    <Typography variant="h2" fontWeight={700} color="text.primary">
+                                                        {Math.round(analytics?.percentage || 0)}%
+                                                    </Typography>
+                                                    <Chip
+                                                        label={status.label}
+                                                        color={status.color}
+                                                        size="small"
+                                                        sx={{ fontWeight: 600, height: 24 }}
+                                                    />
+                                                </Box>
+                                                <LinearProgress
+                                                    variant="determinate"
+                                                    value={analytics?.percentage || 0}
+                                                    color={status.color}
+                                                    sx={{
+                                                        height: 8,
+                                                        borderRadius: 1,
+                                                        bgcolor: alpha(theme.palette[status.color].main, 0.1),
+                                                        mb: 1
+                                                    }}
+                                                />
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Minimum required: <strong>75%</strong>
+                                                </Typography>
+                                            </Grid>
+                                            <Grid item xs={12} md={6}>
+                                                <Grid container spacing={2}>
+                                                    <Grid item xs={6}>
+                                                        <Box>
+                                                            <Typography variant="caption" color="text.secondary">Present</Typography>
+                                                            <Typography variant="h5" fontWeight={700}>{analytics?.totalPresent || 0}</Typography>
+                                                        </Box>
+                                                    </Grid>
+                                                    <Grid item xs={6}>
+                                                        <Box>
+                                                            <Typography variant="caption" color="text.secondary">Absent</Typography>
+                                                            <Typography variant="h5" fontWeight={700}>{analytics?.totalAbsent || 0}</Typography>
+                                                        </Box>
+                                                    </Grid>
+                                                    <Grid item xs={6}>
+                                                        <Box>
+                                                            <Typography variant="caption" color="text.secondary">Total Conducted</Typography>
+                                                            <Typography variant="h5" fontWeight={700}>{analytics?.totalSessions || 0}</Typography>
+                                                        </Box>
+                                                    </Grid>
+                                                    <Grid item xs={6}>
+                                                        <Box>
+                                                            <Typography variant="caption" color="text.secondary">Classes Needed</Typography>
+                                                            <Typography variant="h5" fontWeight={700} color={attendanceStatus?.classesNeededForEligibility > 0 ? 'warning.main' : 'success.main'}>
+                                                                {attendanceStatus?.classesNeededForEligibility || 0}
+                                                            </Typography>
+                                                        </Box>
+                                                    </Grid>
+                                                </Grid>
+                                            </Grid>
+                                        </Grid>
+                                    </Paper>
+
+                                    {/* 2. TODAY'S SCHEDULE */}
+                                    <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <CalendarIcon color="primary" />
+                                            <Typography variant="h6" fontWeight={700}>Today's Schedule</Typography>
+                                        </Box>
+                                        {todaySessions.length === 0 ? (
+                                            <Box sx={{ p: 6, textAlign: 'center' }}>
+                                                <CalendarIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+                                                <Typography variant="h6" color="text.secondary">No classes today</Typography>
+                                                <Typography variant="body2" color="text.disabled">You're free. Enjoy!</Typography>
+                                            </Box>
+                                        ) : (
+                                            <TableContainer>
+                                                <Table>
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
+                                                            <TableCell sx={{ fontWeight: 600 }}>Subject</TableCell>
+                                                            <TableCell sx={{ fontWeight: 600 }}>Faculty</TableCell>
+                                                            <TableCell sx={{ fontWeight: 600 }}>Room</TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 600 }}>Status</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {todaySessions.map((session, idx) => (
+                                                            <TableRow key={idx} hover>
+                                                                <TableCell>{new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</TableCell>
+                                                                <TableCell><strong>{session.subjectName}</strong></TableCell>
+                                                                <TableCell>{session.facultyName}</TableCell>
+                                                                <TableCell>{session.room || '101'}</TableCell>
+                                                                <TableCell align="right">
+                                                                    <Chip
+                                                                        label={session.status}
+                                                                        size="small"
+                                                                        color={session.status === 'Open' ? 'success' : 'default'}
+                                                                        variant={session.status === 'Open' ? 'filled' : 'outlined'}
+                                                                    />
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                        )}
+                                    </Paper>
+
+                                    {/* 3. SUBJECT-WISE PERFORMANCE */}
+                                    <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <SchoolIcon color="primary" />
+                                            <Typography variant="h6" fontWeight={700}>Subject-wise Performance</Typography>
+                                        </Box>
+                                        <TableContainer>
+                                            <Table>
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ fontWeight: 600 }}>Subject</TableCell>
+                                                        <TableCell align="center" sx={{ fontWeight: 600 }}>Attended / Total</TableCell>
+                                                        <TableCell align="center" sx={{ fontWeight: 600 }}>Percentage</TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 600 }}>Status</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {subjects.map((sub) => {
+                                                        const pct = sub.attendancePercentage || 0;
+                                                        const subStatus = getStatusBadge(pct);
+                                                        return (
+                                                            <TableRow key={sub.id} hover>
+                                                                <TableCell>
+                                                                    <Typography fontWeight={600}>{sub.name}</Typography>
+                                                                    <Typography variant="caption" color="text.secondary">{sub.code}</Typography>
+                                                                </TableCell>
+                                                                <TableCell align="center">{sub.attended || 0} / {sub.total || 0}</TableCell>
+                                                                <TableCell align="center">
+                                                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                                                                        <LinearProgress
+                                                                            variant="determinate"
+                                                                            value={pct}
+                                                                            color={subStatus.color}
+                                                                            sx={{ width: 80, height: 6, borderRadius: 1 }}
+                                                                        />
+                                                                        <Typography variant="body2" fontWeight={600}>{pct.toFixed(0)}%</Typography>
+                                                                    </Box>
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Chip
+                                                                        label={subStatus.label}
+                                                                        size="small"
+                                                                        color={subStatus.color}
+                                                                        variant="outlined"
+                                                                    />
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </Paper>
+
+                                    {/* 4. SMART INSIGHTS - Refined */}
+                                    <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                            <TrendingUpIcon color="primary" />
+                                            <Typography variant="h6" fontWeight={700}>Attendance Insights</Typography>
+                                        </Box>
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12} md={6}>
+                                                <Box sx={{ p: 2, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2, border: '1px solid', borderColor: alpha(theme.palette.info.main, 0.2) }}>
+                                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Prediction</Typography>
+                                                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                                        Missing the next <strong>2 classes</strong> will drop attendance to{' '}
+                                                        <span style={{ color: theme.palette.error.main, fontWeight: 700 }}>
+                                                            {((analytics?.totalPresent || 0) / ((analytics?.totalSessions || 0) + 2) * 100).toFixed(1)}%
+                                                        </span>
                                                     </Typography>
                                                 </Box>
-                                                <Button
-                                                    variant="contained"
-                                                    onClick={() => setShowScanner(true)}
-                                                    startIcon={<QrCodeScannerIcon />}
-                                                    sx={{
-                                                        bgcolor: 'white',
-                                                        color: 'primary.main',
-                                                        fontWeight: 800,
-                                                        px: 3,
-                                                        py: 1.5,
-                                                        borderRadius: 3,
-                                                        '&:hover': { bgcolor: 'grey.100' }
-                                                    }}
-                                                >
-                                                    Mark Attendance
-                                                </Button>
-                                            </Paper>
-                                        </Grid>
-
-                                        {/* Status Cards */}
-                                        <Grid item xs={12} md={8}>
-                                            <Grid container spacing={3}>
-                                                <Grid item xs={12} sm={6}>
-                                                    <Card sx={{ height: '100%', borderRadius: 4, p: 2 }}>
-                                                        <Box display="flex" alignItems="center" gap={2} mb={2}>
-                                                            <CircularProgress variant="determinate" value={analytics?.percentage || 0} size={60} thickness={5} sx={{ color: (analytics?.percentage || 0) < 75 ? 'error.main' : 'success.main' }} />
-                                                            <Box>
-                                                                <Typography variant="h4" fontWeight="800">{analytics?.percentage ? Math.round(analytics.percentage) : 0}%</Typography>
-                                                                <Typography color="text.secondary" variant="body2" fontWeight="600">Overall Attendance</Typography>
-                                                            </Box>
-                                                        </Box>
-                                                        <Divider sx={{ my: 2 }} />
-                                                        <Box display="flex" justifyContent="space-between">
-                                                            <Box>
-                                                                <Typography variant="caption" color="text.secondary">Present</Typography>
-                                                                <Typography variant="h6" fontWeight="700" color="success.main">{analytics?.totalPresent || 0}</Typography>
-                                                            </Box>
-                                                            <Box>
-                                                                <Typography variant="caption" color="text.secondary">Absent</Typography>
-                                                                <Typography variant="h6" fontWeight="700" color="error.main">{analytics?.totalAbsent || 0}</Typography>
-                                                            </Box>
-                                                            <Box>
-                                                                <Typography variant="caption" color="text.secondary">Total</Typography>
-                                                                <Typography variant="h6" fontWeight="700">{analytics?.totalSessions || 0}</Typography>
-                                                            </Box>
-                                                        </Box>
-                                                    </Card>
-                                                </Grid>
-
-                                                <Grid item xs={12} sm={6}>
-                                                    <Card sx={{
-                                                        height: '100%',
-                                                        borderRadius: 4,
-                                                        p: 3,
-                                                        bgcolor: attendanceStatus?.status === 'Eligible' ? 'success.50' : 'warning.50',
-                                                        color: attendanceStatus?.status === 'Eligible' ? 'success.dark' : 'warning.dark',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        justifyContent: 'center'
-                                                    }}>
-                                                        <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                                            {attendanceStatus?.status === 'Eligible' ? <CheckCircleIcon /> : <WarningIcon />}
-                                                            <Typography variant="h6" fontWeight="800">{attendanceStatus?.status || 'Unknown'}</Typography>
-                                                        </Box>
-                                                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                                                            {attendanceStatus?.status === 'Eligible'
-                                                                ? "Great job! You are eligible for exams."
-                                                                : `You need to attend ${attendanceStatus?.classesNeededForEligibility || 0} more classes to reach eligibility.`}
-                                                        </Typography>
-                                                        {attendanceStatus?.status !== 'Eligible' && (
-                                                            <LinearProgress
-                                                                variant="determinate"
-                                                                value={(attendanceStatus?.currentPercentage / attendanceStatus?.requiredPercentage) * 100}
-                                                                color="warning"
-                                                                sx={{ mt: 3, height: 8, borderRadius: 4 }}
-                                                            />
-                                                        )}
-                                                    </Card>
-                                                </Grid>
+                                            </Grid>
+                                            <Grid item xs={12} md={6}>
+                                                <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.05), borderRadius: 2, border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.2) }}>
+                                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Recommendation</Typography>
+                                                    <Typography variant="body2" sx={{ mt: 0.5, color: 'success.main', fontWeight: 600 }}>
+                                                        Attend the next 3 classes to maintain 75%+ attendance safely.
+                                                    </Typography>
+                                                </Box>
                                             </Grid>
                                         </Grid>
+                                    </Paper>
 
-                                        {/* Alerts / Timeline */}
-                                        <Grid item xs={12} md={4}>
-                                            <Card sx={{ height: '100%', borderRadius: 4, p: 2 }}>
-                                                <Typography variant="h6" fontWeight="800" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    <NotificationsIcon fontSize="small" /> Alerts & Notices
-                                                </Typography>
-                                                {alerts.length > 0 ? (
-                                                    <List dense disablePadding>
-                                                        {alerts.map((alert, i) => (
-                                                            <ListItem key={i} sx={{ bgcolor: 'error.50', borderRadius: 2, mb: 1, border: '1px solid', borderColor: 'error.100' }}>
-                                                                <ListItemText
-                                                                    primary={alert}
-                                                                    primaryTypographyProps={{ variant: 'body2', color: 'error.dark', fontWeight: 600 }}
-                                                                />
-                                                            </ListItem>
-                                                        ))}
-                                                    </List>
-                                                ) : (
-                                                    <Box textAlign="center" py={4} color="text.secondary">
-                                                        <CheckCircleIcon sx={{ fontSize: 40, color: 'success.light', mb: 1 }} />
-                                                        <Typography variant="body2">No alerts. You are doing great!</Typography>
-                                                    </Box>
-                                                )}
-                                            </Card>
-                                        </Grid>
+                                    {/* 5. QUICK ACTIONS - Compact */}
+                                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5 }}>
+                                            Quick Actions
+                                        </Typography>
+                                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<DownloadIcon />}
+                                                sx={{ borderRadius: 1.5 }}
+                                            >
+                                                Download Report
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<DescriptionIcon />}
+                                                sx={{ borderRadius: 1.5 }}
+                                            >
+                                                Apply for Leave
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<ReportProblemIcon />}
+                                                sx={{ borderRadius: 1.5 }}
+                                            >
+                                                Report Issue
+                                            </Button>
+                                        </Stack>
+                                    </Paper>
+                                </Stack>
+                            )}
 
-                                        {/* Subject Performance */}
-                                        <Grid item xs={12}>
-                                            <Typography variant="h6" fontWeight="800" gutterBottom>Subject Performance</Typography>
-                                            <Grid container spacing={2}>
-                                                {subjects.map((sub) => (
-                                                    <Grid item xs={12} sm={6} md={4} key={sub.id}>
-                                                        <Card sx={{ borderRadius: 3, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' } }}>
-                                                            <CardContent>
-                                                                <Box display="flex" justifyContent="space-between" mb={1}>
-                                                                    <Typography fontWeight="700" noWrap>{sub.name}</Typography>
-                                                                    {/* This mock percentage would ideally come from the API for each subject. Using random for layout if not available */}
-                                                                    <Typography fontWeight="800" color="primary.main">
-                                                                        {sub.attendancePercentage || (Math.random() * (100 - 60) + 60).toFixed(1)}%
-                                                                    </Typography>
-                                                                </Box>
-                                                                <LinearProgress
-                                                                    variant="determinate"
-                                                                    value={sub.attendancePercentage || 75}
-                                                                    sx={{ height: 6, borderRadius: 3, bgcolor: 'grey.100' }}
-                                                                />
-                                                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                                                                    {sub.code} • {sub.facultyName || 'Faculty'}
-                                                                </Typography>
-                                                            </CardContent>
-                                                        </Card>
-                                                    </Grid>
-                                                ))}
-                                            </Grid>
-                                        </Grid>
-                                    </Grid>
-                                )}
-
-                                {/* CLASSES SECTION */}
-                                {activeSection === 'classes' && (
-                                    <Box>
-                                        <Typography variant="h5" fontWeight="800" gutterBottom>Today's Schedule</Typography>
-                                        <Card sx={{ borderRadius: 4 }}>
-                                            <CardContent>
-                                                {todaySessions.length === 0 ? (
-                                                    <Box textAlign="center" py={4}>
-                                                        <CalendarIcon sx={{ fontSize: 60, color: 'text.disabled' }} />
-                                                        <Typography variant="h6" color="text.secondary" mt={2}>No classes scheduled for today.</Typography>
-                                                    </Box>
-                                                ) : (
-                                                    <List>
-                                                        {todaySessions.map((session, index) => (
-                                                            <React.Fragment key={index}>
-                                                                <ListItem alignItems="flex-start" sx={{ py: 2 }}>
-                                                                    <Box sx={{ mr: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 80 }}>
-                                                                        <Typography variant="caption" color="text.secondary">STARTS</Typography>
-                                                                        <Typography variant="body1" fontWeight="800">
-                                                                            {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                        </Typography>
-                                                                    </Box>
-                                                                    <ListItemText
-                                                                        primary={
-                                                                            <Box display="flex" alignItems="center" gap={1}>
-                                                                                <Typography variant="h6" fontWeight="700">{session.subjectName}</Typography>
-                                                                                <Chip
-                                                                                    label={session.status}
-                                                                                    size="small"
-                                                                                    color={session.status === 'Open' ? 'success' : session.status === 'Closed' ? 'error' : 'warning'}
-                                                                                    sx={{ fontWeight: 'bold', height: 20 }}
-                                                                                />
-                                                                            </Box>
-                                                                        }
-                                                                        secondary={
-                                                                            <Typography component="span" variant="body2" color="text.secondary">
-                                                                                {session.facultyName} • Room {session.room || '101'}
-                                                                            </Typography>
-                                                                        }
-                                                                    />
-                                                                    {session.status === 'Open' && (
-                                                                        <Button
-                                                                            variant="contained"
-                                                                            size="small"
-                                                                            startIcon={<QrCodeScannerIcon />}
-                                                                            onClick={() => setShowScanner(true)}
-                                                                            sx={{ borderRadius: 2 }}
-                                                                        >
-                                                                            Scan
-                                                                        </Button>
-                                                                    )}
-                                                                </ListItem>
-                                                                {index < todaySessions.length - 1 && <Divider component="li" variant="inset" />}
-                                                            </React.Fragment>
-                                                        ))}
-                                                    </List>
-                                                )}
-                                            </CardContent>
-                                        </Card>
+                            {/* CLASSES SECTION */}
+                            {activeSection === 'classes' && (
+                                <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                    <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="h6" fontWeight={700}>My Classes</Typography>
                                     </Box>
-                                )}
-
-                                {/* HISTORY SECTION */}
-                                {activeSection === 'history' && (
-                                    <Box>
-                                        <Typography variant="h5" fontWeight="800" gutterBottom>Attendance History</Typography>
-                                        <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>
-                                            <List disablePadding>
-                                                {history.map((record, index) => (
-                                                    <ListItem key={index} divider tabIndex={0} sx={{ py: 2, px: 3, '&:hover': { bgcolor: 'grey.50' } }}>
-                                                        <Box sx={{ mr: 3, textAlign: 'center' }}>
-                                                            <Typography variant="caption" display="block" color="text.secondary" fontWeight="bold">
-                                                                {new Date(record.date).toLocaleDateString([], { month: 'short' }).toUpperCase()}
-                                                            </Typography>
-                                                            <Typography variant="h5" fontWeight="800" color="primary.main">
-                                                                {new Date(record.date).getDate()}
+                                    {todaySessions.length === 0 ? (
+                                        <Box sx={{ p: 6, textAlign: 'center' }}>
+                                            <CalendarIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+                                            <Typography variant="h6" color="text.secondary">No classes scheduled for today</Typography>
+                                        </Box>
+                                    ) : (
+                                        <List>
+                                            {todaySessions.map((session, idx) => (
+                                                <React.Fragment key={idx}>
+                                                    <ListItem sx={{ py: 2 }}>
+                                                        <Box sx={{ mr: 3, textAlign: 'center', minWidth: 60 }}>
+                                                            <Typography variant="caption" color="text.secondary">START</Typography>
+                                                            <Typography variant="body1" fontWeight={700}>
+                                                                {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </Typography>
                                                         </Box>
                                                         <ListItemText
-                                                            primary={<Typography variant="subtitle1" fontWeight="700">{record.subjectName}</Typography>}
-                                                            secondary={
-                                                                <Typography variant="body2" color="text.secondary">
-                                                                    {new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {record.sessionId ? `Session ${record.sessionId}` : 'Manual Entry'}
-                                                                </Typography>
-                                                            }
+                                                            primary={<Typography variant="subtitle1" fontWeight={700}>{session.subjectName}</Typography>}
+                                                            secondary={`${session.facultyName} • Room ${session.room || '101'}`}
                                                         />
-                                                        <Chip
-                                                            label={record.status}
-                                                            color={record.status === 'Present' ? 'success' : 'error'}
-                                                            variant={record.status === 'Present' ? 'filled' : 'outlined'}
-                                                            fontWeight="bold"
-                                                        />
+                                                        {session.status === 'Open' && (
+                                                            <Button
+                                                                variant="contained"
+                                                                size="small"
+                                                                startIcon={<QrCodeScannerIcon />}
+                                                                onClick={() => setShowScanner(true)}
+                                                            >
+                                                                Scan
+                                                            </Button>
+                                                        )}
                                                     </ListItem>
-                                                ))}
-                                                {history.length === 0 && (
-                                                    <Box p={4} textAlign="center">No history available.</Box>
-                                                )}
-                                            </List>
-                                        </Paper>
-                                    </Box>
-                                )}
+                                                    {idx < todaySessions.length - 1 && <Divider />}
+                                                </React.Fragment>
+                                            ))}
+                                        </List>
+                                    )}
+                                </Paper>
+                            )}
 
-                                {/* PROFILE SECTION Placeholder */}
-                                {activeSection === 'profile' && (
-                                    <Box textAlign="center" py={4}>
-                                        <Avatar sx={{ width: 100, height: 100, mx: 'auto', mb: 2, bgcolor: 'primary.main', fontSize: 32 }}>
-                                            {user?.username?.charAt(0).toUpperCase()}
-                                        </Avatar>
-                                        <Typography variant="h5" fontWeight="800">{user?.firstName} {user?.lastName}</Typography>
-                                        <Typography color="text.secondary">{user?.username}</Typography>
-                                        <Button variant="outlined" sx={{ mt: 2 }} onClick={() => setOpenChangePassword(true)}>
-                                            Change Password
-                                        </Button>
+                            {/* HISTORY SECTION */}
+                            {activeSection === 'history' && (
+                                <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                    <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="h6" fontWeight={700}>Attendance History</Typography>
                                     </Box>
-                                )}
-                            </Box>
-                        </Fade>
-                    </Container>
+                                    <List>
+                                        {history.map((record, idx) => (
+                                            <React.Fragment key={idx}>
+                                                <ListItem sx={{ py: 2 }}>
+                                                    <Box sx={{ mr: 3, textAlign: 'center', minWidth: 50 }}>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {new Date(record.date).toLocaleDateString([], { month: 'short' }).toUpperCase()}
+                                                        </Typography>
+                                                        <Typography variant="h6" fontWeight={700}>
+                                                            {new Date(record.date).getDate()}
+                                                        </Typography>
+                                                    </Box>
+                                                    <ListItemText
+                                                        primary={<Typography fontWeight={600}>{record.subjectName}</Typography>}
+                                                        secondary={new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    />
+                                                    <Chip
+                                                        label={record.status}
+                                                        size="small"
+                                                        color={record.status === 'Present' ? 'success' : 'error'}
+                                                        variant="outlined"
+                                                    />
+                                                </ListItem>
+                                                {idx < history.length - 1 && <Divider />}
+                                            </React.Fragment>
+                                        ))}
+                                    </List>
+                                </Paper>
+                            )}
+
+                            {/* PROFILE SECTION */}
+                            {activeSection === 'profile' && (
+                                <Paper elevation={0} sx={{ p: 4, borderRadius: 2, border: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
+                                    <Avatar sx={{ width: 80, height: 80, mx: 'auto', mb: 2, bgcolor: 'primary.main', fontSize: 32 }}>
+                                        {(user?.firstName || user?.username || 'S').charAt(0).toUpperCase()}
+                                    </Avatar>
+                                    <Typography variant="h5" fontWeight={700}>{user?.firstName || user?.username} {user?.lastName || ''}</Typography>
+                                    <Typography color="text.secondary" sx={{ mb: 3 }}>{user?.username}</Typography>
+                                    <Button variant="outlined" onClick={() => setOpenChangePassword(true)}>
+                                        Change Password
+                                    </Button>
+                                </Paper>
+                            )}
+                        </Container>
+                    </Box>
                 </Box>
             </Box>
 
@@ -557,100 +654,94 @@ const StudentDashboard = () => {
                 onClose={() => setShowScanner(false)}
                 maxWidth="sm"
                 fullWidth
-                PaperProps={{ sx: { borderRadius: 4, p: 1 } }}
+                PaperProps={{ sx: { borderRadius: 2 } }}
             >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
-                    <Typography variant="h6" fontWeight="800">Scan Attendance QR</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="h6" fontWeight={700}>Scan Attendance QR</Typography>
                     <IconButton onClick={() => setShowScanner(false)}><CloseIcon /></IconButton>
                 </Box>
 
-                <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Box sx={{ p: 2 }}>
                     {!scanResult ? (
                         <>
                             <Box sx={{
                                 border: '2px dashed',
                                 borderColor: 'divider',
-                                borderRadius: 4,
+                                borderRadius: 2,
                                 overflow: 'hidden',
                                 bgcolor: '#000',
-                                minHeight: 300,
-                                position: 'relative'
+                                minHeight: 300
                             }}>
                                 <div id="reader" style={{ width: '100%' }}></div>
                             </Box>
-                            <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                                Point your camera at the session QR code displayed by your faculty.
+                            <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary', textAlign: 'center' }}>
+                                Point your camera at the session QR code
                             </Typography>
                         </>
                     ) : !image ? (
                         <Box>
-                            <Alert severity="success" sx={{ mb: 2 }}>QR Code Scanned! Now verify your identity.</Alert>
-                            <Box sx={{
-                                borderRadius: 4,
-                                overflow: 'hidden',
-                                border: '2px solid',
-                                borderColor: 'primary.main',
-                                mb: 2
-                            }}>
-                                <Webcam
-                                    audio={false}
-                                    ref={webcamRef}
-                                    screenshotFormat="image/jpeg"
-                                    width="100%"
-                                />
+                            <Alert severity="success" sx={{ mb: 2 }}>QR Code Scanned! Now capture your photo.</Alert>
+                            <Box sx={{ borderRadius: 2, overflow: 'hidden', border: '2px solid', borderColor: 'primary.main', mb: 2 }}>
+                                <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" width="100%" />
                             </Box>
-                            <Button
-                                fullWidth
-                                variant="contained"
-                                size="large"
-                                startIcon={<CameraAltIcon />}
-                                onClick={capture}
-                                sx={{ py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
-                            >
-                                Capture Verification Photo
+                            <Button fullWidth variant="contained" startIcon={<CameraAltIcon />} onClick={capture}>
+                                Capture Photo
                             </Button>
                         </Box>
                     ) : (
                         <Box>
-                            <img src={image} alt="Verify" style={{ width: '100%', borderRadius: 16, border: '1px solid #eee' }} />
-
+                            <img src={image} alt="Verify" style={{ width: '100%', borderRadius: 8, border: '1px solid #eee' }} />
                             {message && (
-                                <Alert
-                                    severity={message.includes("SUCCESS") ? "success" : "error"}
-                                    sx={{ my: 2, fontWeight: 'bold' }}
-                                >
+                                <Alert severity={message.includes("SUCCESS") ? "success" : "error"} sx={{ my: 2 }}>
                                     {message}
                                 </Alert>
                             )}
-
                             <Button
                                 fullWidth
                                 variant="contained"
-                                color="success"
-                                size="large"
-                                disabled={loading || message.includes("SUCCESS")}
                                 onClick={handleConfirmAttendance}
-                                sx={{ mt: 2, py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
+                                disabled={loading}
+                                sx={{ mt: 2 }}
                             >
-                                {loading ? <CircularProgress size={24} color="inherit" /> : "Confirm & Submit"}
+                                {loading ? <CircularProgress size={24} color="inherit" /> : 'Confirm Attendance'}
                             </Button>
-
-                            {!loading && !message.includes("SUCCESS") && (
-                                <Button
-                                    fullWidth
-                                    color="inherit"
-                                    onClick={() => { setImage(null); setMessage(""); }}
-                                    sx={{ mt: 1 }}
-                                >
-                                    Retake Photo
-                                </Button>
-                            )}
                         </Box>
                     )}
                 </Box>
             </Dialog>
 
+            {/* CHANGE PASSWORD DIALOG */}
             <ChangePasswordDialog open={openChangePassword} onClose={() => setOpenChangePassword(false)} />
+
+            {/* Floating Action Button for Quick Scan */}
+            {activeSection === 'dashboard' && todaySessions.some(s => s.status === 'Open') && (
+                <Box
+                    sx={{
+                        position: 'fixed',
+                        bottom: { xs: 16, md: 24 },
+                        right: { xs: 16, md: 24 },
+                        zIndex: 1000
+                    }}
+                >
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        size="large"
+                        startIcon={<QrCodeScannerIcon />}
+                        onClick={() => setShowScanner(true)}
+                        sx={{
+                            borderRadius: 2,
+                            px: 3,
+                            py: 1.5,
+                            fontWeight: 700,
+                            boxShadow: 4,
+                            '&:hover': { boxShadow: 8 }
+                        }}
+                    >
+                        Mark Attendance
+                    </Button>
+                </Box>
+            )}
         </Box>
     );
 };

@@ -13,6 +13,8 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import SecurityIcon from '@mui/icons-material/Security';
+import ThemeToggle from '../components/ThemeToggle';
+import GlobalHeader from '../components/GlobalHeader';
 
 const Login = () => {
     const [username, setUsername] = useState("");
@@ -55,236 +57,167 @@ const Login = () => {
     return (
         <Box sx={{
             minHeight: '100vh',
-            display: 'flex',
             bgcolor: 'background.default',
-            overflow: 'hidden'
+            display: 'flex',
+            flexDirection: 'column',
+            overflowX: 'hidden'
         }}>
-            {/* Left Side - Visuals (Hidden on mobile) */}
-            {!isMobile && (
-                <Grid item md={7} lg={8} sx={{
-                    position: 'relative',
-                    background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    p: 4
-                }}>
-                    {/* Animated Background Shapes */}
-                    <Box sx={{
-                        position: 'absolute',
-                        top: '-20%',
-                        left: '-20%',
-                        width: '70%',
-                        height: '70%',
-                        background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)',
-                        borderRadius: '50%',
-                        animation: 'float 25s infinite ease-in-out alternate'
-                    }} />
-                    <Box sx={{
-                        position: 'absolute',
-                        bottom: '-20%',
-                        right: '-10%',
-                        width: '60%',
-                        height: '60%',
-                        background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)',
-                        borderRadius: '50%',
-                        animation: 'float 20s infinite ease-in-out alternate-reverse'
-                    }} />
+            <GlobalHeader showToggle={false} />
+            <Box sx={{ position: 'absolute', top: 12, right: 20, zIndex: 1201 }}>
+                <ThemeToggle />
+            </Box>
 
-                    {/* Content Overlay */}
-                    <Fade in timeout={1000}>
-                        <Box sx={{ textAlign: 'center', color: 'white', zIndex: 2, maxWidth: '600px' }}>
-                            <Box sx={{
-                                bgcolor: 'rgba(255, 255, 255, 0.15)',
-                                backdropFilter: 'blur(20px)',
-                                p: 3,
-                                borderRadius: 4,
-                                display: 'inline-flex',
-                                mb: 4,
-                                boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.2)'
-                            }}>
-                                <SchoolIcon sx={{ fontSize: 60, color: '#fff' }} />
-                            </Box>
-                            <Typography variant="h2" sx={{ fontWeight: 800, mb: 2, letterSpacing: '-1px' }}>
-                                Smart Attendance
-                            </Typography>
-                            <Typography variant="h5" sx={{ opacity: 0.9, fontWeight: 400, mb: 6 }}>
-                                JNTUA College of Engineering Ananthapuramu
-                            </Typography>
-
-                            {/* Feature Pills */}
-                            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-                                <Box sx={featurePillStyle}>
-                                    <SecurityIcon sx={{ fontSize: 20 }} />
-                                    <Typography variant="body2" fontWeight="600">Secure Access</Typography>
-                                </Box>
-                                <Box sx={featurePillStyle}>
-                                    <TrendingUpIcon sx={{ fontSize: 20 }} />
-                                    <Typography variant="body2" fontWeight="600">Real-time Analytics</Typography>
-                                </Box>
-                            </Box>
-                        </Box>
-                    </Fade>
-                </Grid>
-            )}
-
-            {/* Right Side - Login Form */}
-            <Grid item xs={12} md={5} lg={4} sx={{
+            <Container maxWidth="xs" sx={{
+                flexGrow: 1,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
-                alignItems: 'center',
-                p: 4,
-                position: 'relative',
-                zIndex: 1
+                py: 4
             }}>
-                <Container maxWidth="xs">
-                    <Box sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: isMobile ? 'center' : 'flex-start',
-                        width: '100%'
-                    }}>
-                        {isMobile && (
-                            <SchoolIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                        )}
-
-                        <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 1 }}>
-                            Welcome back
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: 'text.secondary', mb: 5 }}>
-                            Please enter your credentials to access the portal.
-                        </Typography>
-
-                        <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
-                            <TextField
-                                label="User ID / Roll Number"
-                                fullWidth
-                                margin="normal"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <PersonOutlineIcon color="action" />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={{ mb: 2 }}
-                            />
-
-                            <TextField
-                                label="Password"
-                                type={showPassword ? "text" : "password"}
-                                fullWidth
-                                margin="normal"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <LockOutlinedIcon color="action" />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                edge="end"
-                                            >
-                                                {showPassword ? <VisibilityOff /> : <Visibility />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                }}
-                                sx={{ mb: 1 }}
-                            />
-
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
-                                <Typography variant="caption" sx={{
-                                    color: 'primary.main',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    '&:hover': { textDecoration: 'underline' }
-                                }}>
-                                    Forgot Password?
-                                </Typography>
+                <Fade in timeout={800}>
+                    <Paper
+                        elevation={0}
+                        sx={{
+                            p: 4,
+                            borderRadius: 4,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            bgcolor: 'background.paper',
+                            boxShadow: theme.palette.mode === 'dark'
+                                ? '0 8px 32px rgba(0,0,0,0.4)'
+                                : '0 8px 32px rgba(0,0,0,0.05)'
+                        }}
+                    >
+                        <Box sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            width: '100%'
+                        }}>
+                            <Box sx={{
+                                width: 56,
+                                height: 56,
+                                bgcolor: 'primary.soft',
+                                color: 'primary.main',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                mb: 3,
+                                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.15)'
+                            }}>
+                                <PersonOutlineIcon fontSize="large" />
                             </Box>
 
-                            {error && (
-                                <Fade in>
-                                    <Paper sx={{
-                                        p: 2,
-                                        mb: 3,
-                                        bgcolor: '#FEF2F2',
-                                        border: '1px solid #FCA5A5',
-                                        color: '#B91C1C',
-                                        borderRadius: 2,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 1
-                                    }} elevation={0}>
-                                        <Typography variant="body2" fontWeight="600">{error}</Typography>
-                                    </Paper>
-                                </Fade>
-                            )}
-
-                            <Button
-                                type="submit"
-                                fullWidth
-                                variant="contained"
-                                size="large"
-                                disabled={loading}
-                                sx={{
-                                    py: 1.8,
-                                    fontSize: '1rem',
-                                    boxShadow: '0 8px 16px -4px rgba(79, 70, 229, 0.4)',
-                                    mb: 3
-                                }}
-                            >
-                                {loading ? "Signing in..." : "Sign In"}
-                            </Button>
-
-                            <Typography variant="body2" align="center" color="text.secondary">
-                                New student? <Box component="span" sx={{ color: 'primary.main', fontWeight: 600, cursor: 'pointer' }}>Contact Admin</Box>
+                            <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 1, textAlign: 'center' }}>
+                                Welcome Back
                             </Typography>
-                        </Box>
-                    </Box>
-                </Container>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4, textAlign: 'center' }}>
+                                Sign in to your dashboard
+                            </Typography>
 
-                <Box sx={{ position: 'absolute', bottom: 20, width: '100%', textAlign: 'center' }}>
+                            <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+                                <TextField
+                                    label="User ID / Roll Number"
+                                    fullWidth
+                                    margin="normal"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <PersonOutlineIcon color="action" />
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                    sx={{ mb: 2 }}
+                                />
+
+                                <TextField
+                                    label="Password"
+                                    type={showPassword ? "text" : "password"}
+                                    fullWidth
+                                    margin="normal"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <LockOutlinedIcon color="action" />
+                                            </InputAdornment>
+                                        ),
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    edge="end"
+                                                >
+                                                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                    sx={{ mb: 1 }}
+                                />
+
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+                                    <Typography variant="caption" sx={{
+                                        color: 'primary.main',
+                                        cursor: 'pointer',
+                                        fontWeight: 600,
+                                        '&:hover': { textDecoration: 'underline' }
+                                    }}>
+                                        Forgot Password?
+                                    </Typography>
+                                </Box>
+
+                                {error && (
+                                    <Fade in>
+                                        <Paper sx={{
+                                            p: 2,
+                                            mb: 3,
+                                            bgcolor: 'error.lighter',
+                                            border: '1px solid',
+                                            borderColor: 'error.light',
+                                            color: 'error.dark',
+                                            borderRadius: 2,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 1
+                                        }} elevation={0}>
+                                            <Typography variant="body2" fontWeight="600">{error}</Typography>
+                                        </Paper>
+                                    </Fade>
+                                )}
+
+                                <Button
+                                    type="submit"
+                                    fullWidth
+                                    variant="contained"
+                                    size="large"
+                                    disabled={loading}
+                                    sx={{
+                                        py: 1.8,
+                                        fontSize: '1rem',
+                                        boxShadow: '0 8px 16px -4px rgba(79, 70, 229, 0.4)',
+                                        mb: 3
+                                    }}
+                                >
+                                    {loading ? "Signing in..." : "Sign In"}
+                                </Button>
+                            </Box>
+                        </Box>
+                    </Paper>
+                </Fade>
+
+                <Box sx={{ mt: 4, textAlign: 'center' }}>
                     <Typography variant="caption" color="text.disabled">
                         © {new Date().getFullYear()} JNTUA CE Ananthapuramu
                     </Typography>
                 </Box>
-            </Grid>
-
-            {/* Animation Styles */}
-            <style>
-                {`
-                @keyframes float {
-                    0% { transform: translateY(0px) rotate(0deg); }
-                    50% { transform: translateY(-20px) rotate(2deg); }
-                    100% { transform: translateY(0px) rotate(0deg); }
-                }
-                `}
-            </style>
+            </Container>
         </Box>
     );
-};
-
-const featurePillStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 1,
-    bgcolor: 'rgba(255,255,255,0.1)',
-    backdropFilter: 'blur(10px)',
-    px: 2,
-    py: 1,
-    borderRadius: 50,
-    border: '1px solid rgba(255,255,255,0.2)'
 };
 
 export default Login;

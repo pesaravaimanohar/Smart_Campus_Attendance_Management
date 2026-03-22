@@ -1,0 +1,317 @@
+package com.college.smartattendance.service;
+
+import com.college.smartattendance.entity.*;
+import com.college.smartattendance.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.*;
+
+@Service
+public class PromotionEngineService {
+
+    @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
+    private StudentSemesterHistoryRepository semesterHistoryRepository;
+
+    @Autowired
+    private AuditService auditService;
+
+    /**
+     * Promotion rules enum
+     */
+    public enum PromotionRule {
+        PASS, // All subjects passed → Promote
+        BACKLOG, // 1-3 backlogs → Conditional promote
+        DETAINED // >3 backlogs or critical failures → Detain
+    }
+
+    /**
+     * Promotion result DTO
+     */
+    public static class PromotionResult {
+        private int totalStudents;
+        private int promoted;
+        private int conditionalPromoted;
+        private int detained;
+        private List<String> errors;
+
+        public PromotionResult() {
+            this.errors = new ArrayList<>();
+        }
+
+        // Getters and setters
+        public int getTotalStudents() {
+            return totalStudents;
+        }
+
+        public void setTotalStudents(int totalStudents) {
+            this.totalStudents = totalStudents;
+        }
+
+        public int getPromoted() {
+            return promoted;
+        }
+
+        public void setPromoted(int promoted) {
+            this.promoted = promoted;
+        }
+
+        public int getConditionalPromoted() {
+            return conditionalPromoted;
+        }
+
+        public void setConditionalPromoted(int conditionalPromoted) {
+            this.conditionalPromoted = conditionalPromoted;
+        }
+
+        public int getDetained() {
+            return detained;
+        }
+
+        public void setDetained(int detained) {
+            this.detained = detained;
+        }
+
+        public List<String> getErrors() {
+            return errors;
+        }
+
+        public void setErrors(List<String> errors) {
+            this.errors = errors;
+        }
+    }
+
+    /**
+     * Bulk promote students for a department and semester
+     * 
+     * @param departmentCode  Department code
+     * @param currentSemester Current semester (students to promote FROM)
+     * @param academicYear    Academic year
+     * @param promotionData   Map of rollNumber -> (passed: boolean, backlogs: int)
+     * @param promotedBy      User ID performing promotion
+     * @return PromotionResult summary
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PromotionResult bulkPromoteStudents(
+            String departmentCode,
+            Integer currentSemester,
+            String academicYear,
+            Map<String, Map<String, Object>> promotionData,
+            Long promotedBy) {
+
+        PromotionResult result = new PromotionResult();
+
+        try {
+            // Get all students in the department and semester
+            List<Student> students = studentRepository.findByDepartmentAndCurrentSemester(
+                    departmentCode, currentSemester);
+
+            result.setTotalStudents(students.size());
+
+            for (Student student : students) {
+                String rollNumber = student.getRollNumber();
+
+                // Skip if no promotion data provided
+                if (!promotionData.containsKey(rollNumber)) {
+                    result.getErrors().add("No promotion data for: " + rollNumber);
+                    continue;
+                }
+
+                Map<String, Object> data = promotionData.get(rollNumber);
+                boolean passed = (Boolean) data.getOrDefault("passed", false);
+                int backlogs = (Integer) data.getOrDefault("backlogs", 0);
+
+                // Determine promotion status
+                PromotionRule rule;
+                PromotionStatus status;
+                String remarks;
+
+                if (passed) {
+                    rule = PromotionRule.PASS;
+                    status = PromotionStatus.PROMOTED;
+                    remarks = "Promoted - All subjects passed";
+                    result.setPromoted(result.getPromoted() + 1);
+                } else if (backlogs > 0 && backlogs <= 3) {
+                    rule = PromotionRule.BACKLOG;
+                    status = PromotionStatus.CONDITIONAL;
+                    remarks = "Conditional promotion - " + backlogs + " backlog(s)";
+                    result.setConditionalPromoted(result.getConditionalPromoted() + 1);
+                } else {
+                    rule = PromotionRule.DETAINED;
+                    status = PromotionStatus.DETAINED;
+                    remarks = "Detained - " + backlogs + " backlog(s)";
+                    result.setDetained(result.getDetained() + 1);
+                }
+
+                // Create semester history record
+                StudentSemesterHistory history = new StudentSemesterHistory();
+                history.setStudent(student);
+                history.setSemester(currentSemester);
+                history.setAcademicYear(academicYear);
+                history.setPromotionStatus(status);
+                history.setRemarks(remarks);
+                history.setBacklogs(backlogs);
+                history.setPromotedAt(LocalDateTime.now());
+                history.setPromotedBy(promotedBy);
+
+                semesterHistoryRepository.save(history);
+
+                // Update student's current semester (only if promoted or conditional)
+                Integer oldSemester = student.getCurrentSemester();
+                if (status == PromotionStatus.PROMOTED || status == PromotionStatus.CONDITIONAL) {
+                    student.setCurrentSemester(currentSemester + 1);
+                    studentRepository.save(student);
+                }
+
+                // Audit log
+                auditService.logAction(
+                        promotedBy,
+                        "Student",
+                        student.getId(),
+                        "PROMOTION",
+                        "Semester " + oldSemester,
+                        status.toString() + " to Semester " + student.getCurrentSemester() + " - " + remarks,
+                        null);
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            result.getErrors().add("Promotion failed: " + e.getMessage());
+            throw new RuntimeException("Bulk promotion failed", e);
+        }
+    }
+
+    /**
+     * Reverse promotion for a specific academic year and semester
+     * Requires special permission (Admin/Principal only)
+     * 
+     * @param departmentCode Department code
+     * @param semester       Semester to reverse FROM
+     * @param academicYear   Academic year
+     * @param reversedBy     User ID performing reversal
+     * @return Count of reversed promotions
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int reversePromotion(
+            String departmentCode,
+            Integer semester,
+            String academicYear,
+            Long reversedBy) {
+
+        int count = 0;
+
+        // Find all semester history records for this promotion
+        List<StudentSemesterHistory> histories = semesterHistoryRepository
+                .findBySemesterAndAcademicYear(semester, academicYear);
+
+        for (StudentSemesterHistory history : histories) {
+            Student student = history.getStudent();
+
+            // Only reverse if student is in the specified department
+            if (!student.getDepartment().equals(departmentCode)) {
+                continue;
+            }
+
+            // Reverse semester progression (only if was promoted/conditional)
+            if (history.getPromotionStatus() == PromotionStatus.PROMOTED ||
+                    history.getPromotionStatus() == PromotionStatus.CONDITIONAL) {
+
+                Integer currentSem = student.getCurrentSemester();
+                student.setCurrentSemester(semester); // Revert to original semester
+                studentRepository.save(student);
+
+                // Audit log
+                auditService.logAction(
+                        reversedBy,
+                        "Student",
+                        student.getId(),
+                        "PROMOTION_REVERSED",
+                        "Semester " + currentSem,
+                        "Reverted to Semester " + semester,
+                        null);
+
+                count++;
+            }
+
+            // Mark history as reversed
+            history.setRemarks(history.getRemarks() + " [REVERSED]");
+            semesterHistoryRepository.save(history);
+        }
+
+        return count;
+    }
+
+    /**
+     * Get promotion eligibility for students
+     * Returns students who are eligible for promotion based on department and
+     * semester
+     * 
+     * @param departmentCode Department code
+     * @param semester       Current semester
+     * @return List of eligible students
+     */
+    public List<Student> getPromotionEligibleStudents(String departmentCode, Integer semester) {
+        return studentRepository.findByDepartmentAndCurrentSemester(departmentCode, semester);
+    }
+
+    /**
+     * Get promotion history for a student
+     * 
+     * @param studentId Student ID
+     * @return List of semester history records
+     */
+    public List<StudentSemesterHistory> getStudentPromotionHistory(Long studentId) {
+        return semesterHistoryRepository.findByStudentIdOrderBySemesterAsc(studentId);
+    }
+
+    /**
+     * Get promotion statistics for a department and academic year
+     * 
+     * @param departmentCode Department code
+     * @param academicYear   Academic year
+     * @return Map of statistics
+     */
+    public Map<String, Object> getPromotionStatistics(String departmentCode, String academicYear) {
+        List<StudentSemesterHistory> histories = semesterHistoryRepository
+                .findByAcademicYear(academicYear);
+
+        int promoted = 0;
+        int conditional = 0;
+        int detained = 0;
+
+        for (StudentSemesterHistory history : histories) {
+            if (!history.getStudent().getDepartment().equals(departmentCode)) {
+                continue;
+            }
+
+            switch (history.getPromotionStatus()) {
+                case PROMOTED:
+                    promoted++;
+                    break;
+                case CONDITIONAL:
+                    conditional++;
+                    break;
+                case DETAINED:
+                    detained++;
+                    break;
+            }
+        }
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("promoted", promoted);
+        stats.put("conditional", conditional);
+        stats.put("detained", detained);
+        stats.put("total", promoted + conditional + detained);
+        stats.put("promotionRate", promoted + conditional > 0
+                ? (double) promoted / (promoted + conditional + detained) * 100
+                : 0.0);
+
+        return stats;
+    }
+}

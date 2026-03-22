@@ -5,6 +5,8 @@ import { changePassword } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
+import ThemeToggle from '../components/ThemeToggle';
+
 const ChangePassword = () => {
     const [oldPassword, setOldPassword] = useState('');
     const [password, setPassword] = useState('');
@@ -56,9 +58,13 @@ const ChangePassword = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+                background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+                position: 'relative' // Added for absolute positioning context
             }}
         >
+            <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
+                <ThemeToggle />
+            </Box>
             <Container component="main" maxWidth="xs">
                 <Fade in timeout={800}>
                     <Paper

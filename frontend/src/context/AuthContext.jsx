@@ -19,7 +19,13 @@ export const AuthProvider = ({ children }) => {
                     setUser({ ...decoded, token });
                 }
             } catch (e) {
-                logout();
+                // Handle Mock Tokens for development
+                if (token.startsWith("mock-token-")) {
+                    const role = token.replace("mock-token-", "").toUpperCase();
+                    setUser({ sub: "mockUser", role: role, token });
+                } else {
+                    logout();
+                }
             }
         }
         setLoading(false);
@@ -27,8 +33,18 @@ export const AuthProvider = ({ children }) => {
 
     const login = (token) => {
         localStorage.setItem("token", token);
-        const decoded = jwtDecode(token);
-        setUser({ ...decoded, token });
+        try {
+            const decoded = jwtDecode(token);
+            setUser({ ...decoded, token });
+        } catch (e) {
+            // Handle Mock Tokens
+            if (token.startsWith("mock-token-")) {
+                const role = token.replace("mock-token-", "").toUpperCase();
+                setUser({ sub: "mockUser", role: role, token });
+            } else {
+                console.error("Invalid token", e);
+            }
+        }
     };
 
     const logout = () => {

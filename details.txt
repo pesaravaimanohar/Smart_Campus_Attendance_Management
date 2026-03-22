@@ -4,4 +4,4 @@ Admin	    admin	    admin123
 Principal	PRN001	    principal123
 HOD	        HOD001	    hod123
 Faculty	    FAC001	    faculty123
-Student	    219X1A0501	stu123
+Student	    219X1A0501	student123

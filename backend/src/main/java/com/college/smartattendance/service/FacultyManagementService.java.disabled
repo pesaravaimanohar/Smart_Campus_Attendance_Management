@@ -1,0 +1,266 @@
+package com.college.smartattendance.service;
+
+import com.college.smartattendance.dto.FacultyDto;
+import com.college.smartattendance.entity.*;
+import com.college.smartattendance.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class FacultyManagementService {
+
+    @Autowired
+    private FacultyRepository facultyRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserService userService;
+
+    /**
+     * Get all faculty
+     */
+    public List<FacultyDto> getAllFaculty() {
+        return facultyRepository.findAll().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get faculty by ID
+     */
+    public FacultyDto getFacultyById(Long id) {
+        Faculty faculty = facultyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Faculty not found with id: " + id));
+        return convertToDto(faculty);
+    }
+
+    /**
+     * Get faculty by faculty ID
+     */
+    public FacultyDto getFacultyByFacultyId(String facultyId) {
+        Faculty faculty = facultyRepository.findByFacultyId(facultyId)
+                .orElseThrow(() -> new RuntimeException("Faculty not found with faculty ID: " + facultyId));
+        return convertToDto(faculty);
+    }
+
+    /**
+     * Get faculty by department
+     */
+    public List<FacultyDto> getFacultyByDepartment(String departmentCode) {
+        return facultyRepository.findByDepartment(departmentCode).stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get faculty by employment status
+     */
+    public List<FacultyDto> getFacultyByStatus(EmploymentStatus status) {
+        return facultyRepository.findByEmploymentStatus(status).stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get faculty by role
+     */
+    public List<FacultyDto> getFacultyByRole(Role role) {
+        List<User> users = userRepository.findByRole(role);
+        return users.stream()
+                .map(user -> facultyRepository.findByUserId(user.getId()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Create a new faculty
+     */
+    @Transactional
+    public FacultyDto createFaculty(FacultyDto dto, Long createdBy) {
+        // Check for duplicate faculty ID
+        if (userRepository.existsByUsername(dto.getFacultyId())) {
+            throw new RuntimeException("Faculty ID already exists: " + dto.getFacultyId());
+        }
+
+        // Check for duplicate email
+        if (dto.getEmail() != null && userRepository.existsByEmail(dto.getEmail())) {
+            throw new RuntimeException("Email already exists: " + dto.getEmail());
+        }
+
+        // Verify department exists
+        if (dto.getDepartmentCode() != null && !departmentRepository.existsByCode(dto.getDepartmentCode())) {
+            throw new RuntimeException("Department not found: " + dto.getDepartmentCode());
+        }
+
+        // Create User
+        User user = new User();
+        user.setUsername(dto.getFacultyId());
+        user.setFirstName(dto.getFirstName());
+        user.setLastName(dto.getLastName());
+        user.setEmail(dto.getEmail());
+        user.setContactNumber(dto.getMobile());
+        user.setGender(dto.getGender());
+        user.setDob(dto.getDob());
+        user.setRole(dto.getRole() != null ? dto.getRole() : Role.FACULTY);
+        user.setFirstLogin(true);
+
+        // Generate default password
+        String rawPassword = userService.generateDefaultPassword(user);
+        user.setPassword(passwordEncoder.encode(rawPassword));
+
+        user = userRepository.save(user);
+
+        // Create Faculty
+        Faculty faculty = new Faculty();
+        faculty.setUser(user);
+        faculty.setFacultyId(dto.getFacultyId());
+        faculty.setDepartment(dto.getDepartmentCode());
+        faculty.setDesignation(dto.getDesignation());
+        faculty.setQualifications(dto.getQualifications());
+        faculty.setJoiningDate(dto.getJoiningDate());
+        faculty.setEmploymentStatus(EmploymentStatus.ACTIVE);
+
+        faculty = facultyRepository.save(faculty);
+
+        // Audit log
+        auditService.logAction(createdBy, "Faculty", faculty.getId(), "CREATED",
+                null, "Faculty created: " + dto.getFacultyId(), null);
+
+        return convertToDto(faculty);
+    }
+
+    /**
+     * Update faculty
+     */
+    @Transactional
+    public FacultyDto updateFaculty(Long id, FacultyDto dto, Long updatedBy) {
+        Faculty faculty = facultyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Faculty not found with id: " + id));
+
+        User user = faculty.getUser();
+        String oldData = buildOldDataString(faculty, user);
+
+        // Update User
+        if (dto.getFirstName() != null)
+            user.setFirstName(dto.getFirstName());
+        if (dto.getLastName() != null)
+            user.setLastName(dto.getLastName());
+        if (dto.getEmail() != null && !dto.getEmail().equals(user.getEmail())) {
+            if (userRepository.existsByEmail(dto.getEmail())) {
+                throw new RuntimeException("Email already exists: " + dto.getEmail());
+            }
+            user.setEmail(dto.getEmail());
+        }
+        if (dto.getMobile() != null)
+            user.setContactNumber(dto.getMobile());
+        if (dto.getGender() != null)
+            user.setGender(dto.getGender());
+        if (dto.getDob() != null)
+            user.setDob(dto.getDob());
+        if (dto.getRole() != null)
+            user.setRole(dto.getRole());
+
+        userRepository.save(user);
+
+        // Update Faculty
+        if (dto.getDesignation() != null)
+            faculty.setDesignation(dto.getDesignation());
+        if (dto.getQualifications() != null)
+            faculty.setQualifications(dto.getQualifications());
+        if (dto.getJoiningDate() != null)
+            faculty.setJoiningDate(dto.getJoiningDate());
+        if (dto.getEmploymentStatus() != null)
+            faculty.setEmploymentStatus(dto.getEmploymentStatus());
+
+        faculty = facultyRepository.save(faculty);
+
+        String newData = buildOldDataString(faculty, user);
+
+        // Audit log
+        auditService.logAction(updatedBy, "Faculty", faculty.getId(), "UPDATED",
+                oldData, newData, null);
+
+        return convertToDto(faculty);
+    }
+
+    /**
+     * Update faculty employment status
+     */
+    @Transactional
+    public void updateFacultyStatus(Long id, EmploymentStatus newStatus, Long updatedBy) {
+        Faculty faculty = facultyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Faculty not found with id: " + id));
+
+        EmploymentStatus oldStatus = faculty.getEmploymentStatus();
+        faculty.setEmploymentStatus(newStatus);
+        facultyRepository.save(faculty);
+
+        // Audit log
+        auditService.logAction(updatedBy, "Faculty", faculty.getId(), "STATUS_UPDATED",
+                oldStatus.toString(), newStatus.toString(), null);
+    }
+
+    /**
+     * Delete faculty (soft delete via status change)
+     */
+    @Transactional
+    public void deleteFaculty(Long id, Long deletedBy) {
+        updateFacultyStatus(id, EmploymentStatus.INACTIVE, deletedBy);
+    }
+
+    /**
+     * Convert Faculty entity to DTO
+     */
+    private FacultyDto convertToDto(Faculty faculty) {
+        FacultyDto dto = new FacultyDto();
+        User user = faculty.getUser();
+
+        dto.setId(faculty.getId());
+        dto.setFacultyId(faculty.getFacultyId());
+        dto.setFirstName(user.getFirstName());
+        dto.setLastName(user.getLastName());
+        dto.setEmail(user.getEmail());
+        dto.setMobile(user.getContactNumber());
+        dto.setGender(user.getGender());
+        dto.setDob(user.getDob());
+        dto.setRole(user.getRole());
+        dto.setDepartmentCode(faculty.getDepartment());
+        dto.setDesignation(faculty.getDesignation());
+        dto.setQualifications(faculty.getQualifications());
+        dto.setJoiningDate(faculty.getJoiningDate());
+        dto.setEmploymentStatus(faculty.getEmploymentStatus());
+
+        return dto;
+    }
+
+    /**
+     * Build old data string for audit logging
+     */
+    private String buildOldDataString(Faculty faculty, User user) {
+        return String.format("FacultyID: %s, Name: %s %s, Email: %s, Role: %s, Status: %s",
+                faculty.getFacultyId(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getEmail(),
+                user.getRole(),
+                faculty.getEmploymentStatus());
+    }
+}

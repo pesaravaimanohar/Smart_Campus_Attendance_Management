@@ -1,208 +1,594 @@
-import axios from "axios";
+import axios from 'axios';
 
-const api = axios.create({
-    baseURL: "http://localhost:8080/api",
+// API Base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
+// Create axios instance with default config
+const apiClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
 });
 
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+// Request interceptor - Add JWT token
+apiClient.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
     }
-    return config;
-});
+);
+
+// Response interceptor - Handle errors
+apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            // Unauthorized - clear token and redirect to login
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
+// ==================== AUTHENTICATION API ====================
 
 export const loginUser = async (credentials) => {
-    const response = await api.post("/auth/login", credentials);
+    const response = await axios.post(`${API_BASE_URL}/auth/login`, credentials);
     return response.data;
 };
 
-export const getStudentHistory = async () => {
-    // Placeholder
-    return [];
+export const changePassword = async (passwordData) => {
+    const response = await apiClient.post('/auth/change-password', passwordData);
+    return response.data;
 };
 
+export const getCurrentUser = async () => {
+    const response = await apiClient.get('/auth/me');
+    return response.data;
+};
+
+// ==================== ATTENDANCE API (Student & Faculty) ====================
+
 export const markAttendance = async (formData) => {
-    const response = await api.post("/student/mark-attendance", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+    const response = await apiClient.post('/attendance/mark', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
     });
     return response.data;
 };
 
-export const createSession = async (data) => {
-    const response = await api.post("/faculty/sessions", data);
-    return response.data;
-};
-
-export const getFacultyMappings = async () => {
-    const response = await api.get("/faculty/mappings");
-    return response.data;
-};
-
 export const getStudentAnalytics = async () => {
-    const response = await api.get("/student/analytics");
-    return response.data;
-};
-
-export const markManualAttendance = async (data) => {
-    const response = await api.post("/faculty/manual-attendance", data);
-    return response.data;
-};
-
-export const getStudentSubjects = async () => {
-    const response = await api.get("/student/subjects");
-    return response.data;
-};
-
-export const getSubjectAttendance = async (subjectId) => {
-    const response = await api.get(`/student/subject-attendance/${subjectId}`);
+    const response = await apiClient.get('/attendance/analytics');
     return response.data;
 };
 
 export const getAttendanceStatus = async () => {
-    try {
-        const response = await api.get("/student/attendance-status");
-        return response.data;
-    } catch (error) {
-        // Mock data fallback
-        return {
-            status: "Shortage",
-            currentPercentage: 68.5,
-            requiredPercentage: 75.0,
-            classesNeededForEligibility: 6,
-            totalPresent: 45,
-            totalSessions: 65
-        };
-    }
+    const response = await apiClient.get('/attendance/status');
+    return response.data;
 };
 
 export const getTodaySessions = async () => {
-    try {
-        const response = await api.get("/student/today-sessions");
-        return response.data;
-    } catch (error) {
-        // Mock data fallback
-        return [
-            {
-                sessionId: 1,
-                subjectName: "Data Structures",
-                facultyName: "Dr. Smith",
-                startTime: new Date().toISOString(),
-                endTime: new Date(Date.now() + 3600000).toISOString(),
-                status: "Open",
-                hasMarkedAttendance: false
-            },
-            {
-                sessionId: 2,
-                subjectName: "Operating Systems",
-                facultyName: "Prof. Johnson",
-                startTime: new Date(Date.now() + 7200000).toISOString(),
-                endTime: new Date(Date.now() + 10800000).toISOString(),
-                status: "Upcoming",
-                hasMarkedAttendance: false
-            }
-        ];
-    }
+    const response = await apiClient.get('/attendance/sessions/today');
+    return response.data;
 };
 
-export const getAttendanceHistory = async (limit = 5) => {
-    try {
-        const response = await api.get(`/student/attendance-history?limit=${limit}`);
-        return response.data;
-    } catch (error) {
-        // Mock data fallback
-        return [
-            {
-                date: new Date(Date.now() - 86400000).toISOString(),
-                subjectName: "Database Management",
-                status: "Present",
-                remarks: null
-            },
-            {
-                date: new Date(Date.now() - 172800000).toISOString(),
-                subjectName: "Computer Networks",
-                status: "Present",
-                remarks: null
-            },
-            {
-                date: new Date(Date.now() - 259200000).toISOString(),
-                subjectName: "Data Structures",
-                status: "Absent",
-                remarks: null
-            },
-            {
-                date: new Date(Date.now() - 345600000).toISOString(),
-                subjectName: "Operating Systems",
-                status: "Present",
-                remarks: "Manual Override"
-            },
-            {
-                date: new Date(Date.now() - 432000000).toISOString(),
-                subjectName: "Web Technologies",
-                status: "Present",
-                remarks: null
-            }
-        ];
-    }
+export const getAttendanceHistory = async (limit = 10) => {
+    const response = await apiClient.get('/attendance/history', {
+        params: { limit },
+    });
+    return response.data;
 };
 
 export const getStudentAlerts = async () => {
-    try {
-        const response = await api.get("/student/alerts");
-        return response.data;
-    } catch (error) {
-        // Mock data fallback
-        return [
-            "⚠️ Your overall attendance is below 75% (68.5%)",
-            "🔴 Low attendance in Operating Systems (62.3%)",
-            "⚠️ You missed attendance for Database Management yesterday"
-        ];
-    }
+    const response = await apiClient.get('/attendance/alerts');
+    return response.data;
 };
 
-// Admin APIs
+export const getStudentSubjects = async () => {
+    const response = await apiClient.get('/attendance/subjects');
+    return response.data;
+};
+
+export const getSubjectAttendance = async (subjectId) => {
+    const response = await apiClient.get(`/attendance/subjects/${subjectId}`);
+    return response.data;
+};
+
+// ==================== FACULTY SESSION API ====================
+
+export const getFacultyMappings = async () => {
+    const response = await apiClient.get('/faculty/mappings');
+    return response.data;
+};
+
+export const createSession = async (sessionData) => {
+    const response = await apiClient.post('/faculty/sessions', sessionData);
+    return response.data;
+};
+
+export const markManualAttendance = async (attendanceData) => {
+    const response = await apiClient.post('/faculty/attendance/manual', attendanceData);
+    return response.data;
+};
+
+
+// ==================== BULK UPLOAD API ====================
+
+export const bulkUploadAPI = {
+    // Validate student upload
+    validateStudentUpload: async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await apiClient.post('/bulk-upload/students/validate', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
+    // Confirm student upload
+    confirmStudentUpload: async (uploadLogId) => {
+        const response = await apiClient.post(`/bulk-upload/students/confirm/${uploadLogId}`);
+        return response.data;
+    },
+
+    // Validate faculty upload
+    validateFacultyUpload: async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await apiClient.post('/bulk-upload/faculty/validate', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
+    // Confirm faculty upload
+    confirmFacultyUpload: async (uploadLogId) => {
+        const response = await apiClient.post(`/bulk-upload/faculty/confirm/${uploadLogId}`);
+        return response.data;
+    },
+};
+
+// ==================== STUDENT MANAGEMENT API ====================
+
+export const studentAPI = {
+    // Get all students
+    getAll: async () => {
+        const response = await apiClient.get('/students');
+        return response.data;
+    },
+
+    // Get student by ID
+    getById: async (id) => {
+        const response = await apiClient.get(`/students/${id}`);
+        return response.data;
+    },
+
+    // Get student by roll number
+    getByRollNumber: async (rollNumber) => {
+        const response = await apiClient.get(`/students/roll/${rollNumber}`);
+        return response.data;
+    },
+
+    // Get students by department
+    getByDepartment: async (departmentCode) => {
+        const response = await apiClient.get(`/students/department/${departmentCode}`);
+        return response.data;
+    },
+
+    // Get students by semester
+    getBySemester: async (semester) => {
+        const response = await apiClient.get(`/students/semester/${semester}`);
+        return response.data;
+    },
+
+    // Get students by status
+    getByStatus: async (status) => {
+        const response = await apiClient.get(`/students/status/${status}`);
+        return response.data;
+    },
+
+    // Get students by department and semester
+    getByDepartmentAndSemester: async (departmentCode, semester) => {
+        const response = await apiClient.get(`/students/department/${departmentCode}/semester/${semester}`);
+        return response.data;
+    },
+
+    // Create student
+    create: async (studentData) => {
+        const response = await apiClient.post('/students', studentData);
+        return response.data;
+    },
+
+    // Update student
+    update: async (id, studentData) => {
+        const response = await apiClient.put(`/students/${id}`, studentData);
+        return response.data;
+    },
+
+    // Update student status
+    updateStatus: async (id, status) => {
+        const response = await apiClient.patch(`/students/${id}/status`, null, {
+            params: { status },
+        });
+        return response.data;
+    },
+
+    // Delete student (soft delete)
+    delete: async (id) => {
+        const response = await apiClient.delete(`/students/${id}`);
+        return response.data;
+    },
+};
+
+// ==================== FACULTY MANAGEMENT API ====================
+
+export const facultyAPI = {
+    // Get all faculty
+    getAll: async () => {
+        const response = await apiClient.get('/faculty');
+        return response.data;
+    },
+
+    // Get faculty by ID
+    getById: async (id) => {
+        const response = await apiClient.get(`/faculty/${id}`);
+        return response.data;
+    },
+
+    // Get faculty by faculty ID
+    getByFacultyId: async (facultyId) => {
+        const response = await apiClient.get(`/faculty/faculty-id/${facultyId}`);
+        return response.data;
+    },
+
+    // Get faculty by department
+    getByDepartment: async (departmentCode) => {
+        const response = await apiClient.get(`/faculty/department/${departmentCode}`);
+        return response.data;
+    },
+
+    // Get faculty by status
+    getByStatus: async (status) => {
+        const response = await apiClient.get(`/faculty/status/${status}`);
+        return response.data;
+    },
+
+    // Get faculty by role
+    getByRole: async (role) => {
+        const response = await apiClient.get(`/faculty/role/${role}`);
+        return response.data;
+    },
+
+    // Create faculty
+    create: async (facultyData) => {
+        const response = await apiClient.post('/faculty', facultyData);
+        return response.data;
+    },
+
+    // Update faculty
+    update: async (id, facultyData) => {
+        const response = await apiClient.put(`/faculty/${id}`, facultyData);
+        return response.data;
+    },
+
+    // Update faculty status
+    updateStatus: async (id, status) => {
+        const response = await apiClient.patch(`/faculty/${id}/status`, null, {
+            params: { status },
+        });
+        return response.data;
+    },
+
+    // Delete faculty (soft delete)
+    delete: async (id) => {
+        const response = await apiClient.delete(`/faculty/${id}`);
+        return response.data;
+    },
+};
+
+// ==================== PROMOTION API ====================
+
+export const promotionAPI = {
+    // Execute promotion
+    execute: async (departmentCode, currentSemester, academicYear, promotionData) => {
+        const response = await apiClient.post('/promotion/execute', promotionData, {
+            params: { departmentCode, currentSemester, academicYear },
+        });
+        return response.data;
+    },
+
+    // Reverse promotion
+    reverse: async (departmentCode, semester, academicYear) => {
+        const response = await apiClient.post('/promotion/reverse', null, {
+            params: { departmentCode, semester, academicYear },
+        });
+        return response.data;
+    },
+
+    // Get eligible students
+    getEligibleStudents: async (departmentCode, semester) => {
+        const response = await apiClient.get('/promotion/eligible', {
+            params: { departmentCode, semester },
+        });
+        return response.data;
+    },
+
+    // Get student promotion history
+    getStudentHistory: async (studentId) => {
+        const response = await apiClient.get(`/promotion/history/student/${studentId}`);
+        return response.data;
+    },
+
+    // Get promotion statistics
+    getStatistics: async (departmentCode, academicYear) => {
+        const response = await apiClient.get('/promotion/statistics', {
+            params: { departmentCode, academicYear },
+        });
+        return response.data;
+    },
+};
+
+// ==================== DEPARTMENT API ====================
+
+export const departmentAPI = {
+    // Get all departments
+    getAll: async () => {
+        const response = await apiClient.get('/departments');
+        return response.data;
+    },
+
+    // Get active departments
+    getActive: async () => {
+        const response = await apiClient.get('/departments/active');
+        return response.data;
+    },
+
+    // Get department by ID
+    getById: async (id) => {
+        const response = await apiClient.get(`/departments/${id}`);
+        return response.data;
+    },
+
+    // Get department by code
+    getByCode: async (code) => {
+        const response = await apiClient.get(`/departments/code/${code}`);
+        return response.data;
+    },
+
+    // Create department
+    create: async (departmentData) => {
+        const response = await apiClient.post('/departments', departmentData);
+        return response.data;
+    },
+
+    // Update department
+    update: async (id, departmentData) => {
+        const response = await apiClient.put(`/departments/${id}`, departmentData);
+        return response.data;
+    },
+
+    // Set department status
+    setStatus: async (id, active) => {
+        const response = await apiClient.patch(`/departments/${id}/status`, null, {
+            params: { active },
+        });
+        return response.data;
+    },
+
+    // Set HOD
+    setHOD: async (departmentId, facultyId) => {
+        const response = await apiClient.patch(`/departments/${departmentId}/hod/${facultyId}`);
+        return response.data;
+    },
+
+    // Get programs by department
+    getProgramsByDepartment: async (departmentId) => {
+        const response = await apiClient.get(`/departments/${departmentId}/programs`);
+        return response.data;
+    },
+
+    // Get all programs
+    getAllPrograms: async () => {
+        const response = await apiClient.get('/departments/programs');
+        return response.data;
+    },
+
+    // Get active programs
+    getActivePrograms: async () => {
+        const response = await apiClient.get('/departments/programs/active');
+        return response.data;
+    },
+
+    // Create program
+    createProgram: async (departmentId, code, name, type, duration) => {
+        const response = await apiClient.post(`/departments/${departmentId}/programs`, null, {
+            params: { code, name, type, duration },
+        });
+        return response.data;
+    },
+
+    // Set program status
+    setProgramStatus: async (programId, active) => {
+        const response = await apiClient.patch(`/departments/programs/${programId}/status`, null, {
+            params: { active },
+        });
+        return response.data;
+    },
+};
+
+// ==================== SUBJECT ELIGIBILITY & ASSIGNMENT API ====================
+
+export const subjectAPI = {
+    // Add eligibility
+    addEligibility: async (facultyId, subjectId) => {
+        const response = await apiClient.post('/subjects/eligibility', null, {
+            params: { facultyId, subjectId },
+        });
+        return response.data;
+    },
+
+    // Remove eligibility
+    removeEligibility: async (eligibilityId) => {
+        const response = await apiClient.delete(`/subjects/eligibility/${eligibilityId}`);
+        return response.data;
+    },
+
+    // Get eligible subjects for faculty
+    getEligibleSubjects: async (facultyId) => {
+        const response = await apiClient.get(`/subjects/eligibility/faculty/${facultyId}/subjects`);
+        return response.data;
+    },
+
+    // Get eligible faculty for subject
+    getEligibleFaculty: async (subjectId) => {
+        const response = await apiClient.get(`/subjects/eligibility/subject/${subjectId}/faculty`);
+        return response.data;
+    },
+
+    // Bulk add eligibilities
+    bulkAddEligibilities: async (facultyId, subjectIds) => {
+        const response = await apiClient.post('/subjects/eligibility/bulk', subjectIds, {
+            params: { facultyId },
+        });
+        return response.data;
+    },
+
+    // Assign subject
+    assignSubject: async (facultyId, subjectId, section, academicYear, semester) => {
+        const response = await apiClient.post('/subjects/assignments', null, {
+            params: { facultyId, subjectId, section, academicYear, semester },
+        });
+        return response.data;
+    },
+
+    // Unassign subject
+    unassignSubject: async (assignmentId) => {
+        const response = await apiClient.delete(`/subjects/assignments/${assignmentId}`);
+        return response.data;
+    },
+
+    // Lock assignment
+    lockAssignment: async (assignmentId) => {
+        const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/lock`);
+        return response.data;
+    },
+
+    // Unlock assignment
+    unlockAssignment: async (assignmentId) => {
+        const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/unlock`);
+        return response.data;
+    },
+
+    // Get faculty assignments
+    getFacultyAssignments: async (facultyId) => {
+        const response = await apiClient.get(`/subjects/assignments/faculty/${facultyId}`);
+        return response.data;
+    },
+
+    // Get subject assignments
+    getSubjectAssignments: async (subjectId) => {
+        const response = await apiClient.get(`/subjects/assignments/subject/${subjectId}`);
+        return response.data;
+    },
+
+    // Get faculty workload
+    getFacultyWorkload: async (facultyId) => {
+        const response = await apiClient.get(`/subjects/assignments/faculty/${facultyId}/workload`);
+        return response.data;
+    },
+
+    // Reassign subject
+    reassignSubject: async (assignmentId, newFacultyId) => {
+        const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/reassign`, null, {
+            params: { newFacultyId },
+        });
+        return response.data;
+    },
+};
+
+// ==================== ADMIN DASHBOARD API ====================
+
 export const uploadStudents = async (formData) => {
-    const response = await api.post("/admin/upload/students", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+    const response = await apiClient.post('/admin/upload/students', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
     });
     return response.data;
 };
 
 export const uploadFaculty = async (formData) => {
-    const response = await api.post("/admin/upload/faculty", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+    const response = await apiClient.post('/admin/upload/faculty', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
     });
     return response.data;
 };
 
 export const createClass = async (classData) => {
-    const response = await api.post("/admin/classes", classData);
+    const response = await apiClient.post('/admin/classes', classData);
     return response.data;
 };
 
 export const getClasses = async () => {
-    const response = await api.get("/admin/classes");
-    return response.data;
-};
-
-export const deleteClass = async (id) => {
-    const response = await api.delete(`/admin/classes/${id}`);
+    const response = await apiClient.get('/admin/classes');
     return response.data;
 };
 
 export const getAdminStats = async () => {
-    const response = await api.get("/admin/stats");
+    const response = await apiClient.get('/admin/stats');
+    return response.data;
+};
+
+export const deleteClass = async (classId) => {
+    const response = await apiClient.delete(`/admin/classes/${classId}`);
     return response.data;
 };
 
 export const resetAllUsers = async () => {
-    const response = await api.post("/admin/users/reset-first-login");
+    const response = await apiClient.post('/admin/reset-users');
     return response.data;
 };
 
-export const changePassword = async (oldPassword, newPassword) => {
-    const response = await api.post("/users/change-password", { oldPassword, newPassword });
+// ==================== USER PROFILE API ====================
+
+export const getUserProfile = async () => {
+    const response = await apiClient.get('/me');
     return response.data;
 };
 
-export default api;
+export const updateProfileImage = async (formData) => {
+    const response = await apiClient.put('/me/profile-image', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response.data;
+};
+
+export const removeProfileImage = async () => {
+    const response = await apiClient.delete('/me/profile-image');
+    return response.data;
+};
+
+export const updateUserProfile = async (profileData) => {
+    const response = await apiClient.put('/me', profileData);
+    return response.data;
+};
+
+export default apiClient;

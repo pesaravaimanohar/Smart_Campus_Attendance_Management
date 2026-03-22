@@ -1,6 +1,7 @@
 package com.college.smartattendance.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "faculty_subject_map")
@@ -24,6 +25,24 @@ public class FacultySubjectMap {
     @ManyToOne
     @JoinColumn(name = "academic_year_id", nullable = false)
     private AcademicYear academicYear;
+
+    private String section;
+
+    @Column(nullable = false)
+    private Boolean locked = false;
+
+    @Column(name = "assigned_by")
+    private Long assignedBy;
+
+    @Column(name = "assigned_at")
+    private LocalDateTime assignedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (assignedAt == null) {
+            assignedAt = LocalDateTime.now();
+        }
+    }
 
     public FacultySubjectMap() {
     }
@@ -66,5 +85,37 @@ public class FacultySubjectMap {
 
     public void setAcademicYear(AcademicYear academicYear) {
         this.academicYear = academicYear;
+    }
+
+    public String getSection() {
+        return section;
+    }
+
+    public void setSection(String section) {
+        this.section = section;
+    }
+
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
+    public Long getAssignedBy() {
+        return assignedBy;
+    }
+
+    public void setAssignedBy(Long assignedBy) {
+        this.assignedBy = assignedBy;
+    }
+
+    public LocalDateTime getAssignedAt() {
+        return assignedAt;
+    }
+
+    public void setAssignedAt(LocalDateTime assignedAt) {
+        this.assignedAt = assignedAt;
     }
 }

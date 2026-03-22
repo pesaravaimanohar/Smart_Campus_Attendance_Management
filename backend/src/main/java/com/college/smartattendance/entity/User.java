@@ -32,6 +32,7 @@ public class User {
     private String email;
     private String contactNumber;
     private String gender;
+    private String profileImage;
 
     public User() {
     }
@@ -122,5 +123,13 @@ public class User {
 
     public void setGender(String gender) {
         this.gender = gender;
+    }
+
+    public String getProfileImage() {
+        return profileImage;
+    }
+
+    public void setProfileImage(String profileImage) {
+        this.profileImage = profileImage;
     }
 }

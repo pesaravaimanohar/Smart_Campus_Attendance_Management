@@ -1,0 +1,154 @@
+package com.college.smartattendance.service;
+
+import com.college.smartattendance.entity.*;
+import com.college.smartattendance.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Service for managing faculty subject eligibility (static mapping)
+ * This represents permanent teaching permissions, not semester assignments
+ */
+@Service
+public class SubjectEligibilityService {
+
+    @Autowired
+    private FacultySubjectEligibilityRepository eligibilityRepository;
+
+    @Autowired
+    private FacultyRepository facultyRepository;
+
+    @Autowired
+    private SubjectRepository subjectRepository;
+
+    @Autowired
+    private AuditService auditService;
+
+    /**
+     * Add subject eligibility for a faculty
+     */
+    @Transactional
+    public FacultySubjectEligibility addEligibility(Long facultyId, Long subjectId, Long addedBy) {
+        // Check if faculty exists
+        Faculty faculty = facultyRepository.findById(facultyId)
+                .orElseThrow(() -> new RuntimeException("Faculty not found: " + facultyId));
+
+        // Check if subject exists
+        Subject subject = subjectRepository.findById(subjectId)
+                .orElseThrow(() -> new RuntimeException("Subject not found: " + subjectId));
+
+        // Check if eligibility already exists
+        if (eligibilityRepository.existsByFacultyIdAndSubjectId(facultyId, subjectId)) {
+            throw new RuntimeException("Eligibility already exists for this faculty-subject combination");
+        }
+
+        // Create eligibility
+        FacultySubjectEligibility eligibility = new FacultySubjectEligibility();
+        eligibility.setFaculty(faculty);
+        eligibility.setSubject(subject);
+        eligibility.setAddedBy(addedBy);
+        eligibility.setAddedAt(LocalDateTime.now());
+
+        eligibility = eligibilityRepository.save(eligibility);
+
+        // Audit log
+        auditService.logAction(
+                addedBy,
+                "FacultySubjectEligibility",
+                eligibility.getId(),
+                "CREATED",
+                null,
+                "Faculty " + faculty.getFacultyId() + " eligible for " + subject.getSubjectName(),
+                null);
+
+        return eligibility;
+    }
+
+    /**
+     * Remove subject eligibility for a faculty
+     */
+    @Transactional
+    public void removeEligibility(Long eligibilityId, Long removedBy) {
+        FacultySubjectEligibility eligibility = eligibilityRepository.findById(eligibilityId)
+                .orElseThrow(() -> new RuntimeException("Eligibility not found: " + eligibilityId));
+
+        String facultyId = eligibility.getFaculty().getFacultyId();
+        String subjectName = eligibility.getSubject().getSubjectName();
+
+        eligibilityRepository.delete(eligibility);
+
+        // Audit log
+        auditService.logAction(
+                removedBy,
+                "FacultySubjectEligibility",
+                eligibilityId,
+                "DELETED",
+                "Faculty " + facultyId + " eligible for " + subjectName,
+                null,
+                null);
+    }
+
+    /**
+     * Get all eligible subjects for a faculty
+     */
+    public List<Subject> getEligibleSubjects(Long facultyId) {
+        List<FacultySubjectEligibility> eligibilities = eligibilityRepository.findByFacultyId(facultyId);
+
+        return eligibilities.stream()
+                .map(FacultySubjectEligibility::getSubject)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get all eligible faculty for a subject
+     */
+    public List<Faculty> getEligibleFaculty(Long subjectId) {
+        List<FacultySubjectEligibility> eligibilities = eligibilityRepository.findBySubjectId(subjectId);
+
+        return eligibilities.stream()
+                .map(FacultySubjectEligibility::getFaculty)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Check if a faculty is eligible for a subject
+     */
+    public boolean isEligible(Long facultyId, Long subjectId) {
+        return eligibilityRepository.existsByFacultyIdAndSubjectId(facultyId, subjectId);
+    }
+
+    /**
+     * Get all eligibilities for a faculty
+     */
+    public List<FacultySubjectEligibility> getFacultyEligibilities(Long facultyId) {
+        return eligibilityRepository.findByFacultyId(facultyId);
+    }
+
+    /**
+     * Bulk add eligibilities for a faculty
+     */
+    @Transactional
+    public int bulkAddEligibilities(Long facultyId, List<Long> subjectIds, Long addedBy) {
+        int count = 0;
+
+        for (Long subjectId : subjectIds) {
+            try {
+                // Skip if already eligible
+                if (!eligibilityRepository.existsByFacultyIdAndSubjectId(facultyId, subjectId)) {
+                    addEligibility(facultyId, subjectId, addedBy);
+                    count++;
+                }
+            } catch (Exception e) {
+                // Log error but continue with other subjects
+                System.err.println("Failed to add eligibility for subject " + subjectId + ": " + e.getMessage());
+            }
+        }
+
+        return count;
+    }
+}
