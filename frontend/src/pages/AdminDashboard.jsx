@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Container, Typography, Box, Paper, Button, Grid, Card, CardContent,
     AppBar, Toolbar, IconButton, Dialog, DialogTitle, DialogContent,
@@ -64,11 +64,7 @@ const AdminDashboard = () => {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [uploading, setUploading] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
             const [statsData, classesData] = await Promise.all([
@@ -83,7 +79,11 @@ const AdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        void fetchData();
+    }, [fetchData]);
 
     const showSnackbar = (message, severity = 'success') => {
         setSnackbar({ open: true, message, severity });
@@ -168,7 +168,7 @@ const AdminDashboard = () => {
             await deleteClass(id);
             showSnackbar('Class deleted successfully', 'success');
             fetchData();
-        } catch (error) {
+        } catch {
             showSnackbar('Failed to delete class', 'error');
         }
     };
@@ -179,7 +179,7 @@ const AdminDashboard = () => {
         try {
             await resetAllUsers();
             showSnackbar('All users have been reset to first login status', 'success');
-        } catch (error) {
+        } catch {
             showSnackbar('Failed to reset users', 'error');
         }
     };

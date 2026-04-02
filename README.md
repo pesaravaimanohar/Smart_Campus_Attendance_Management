@@ -22,8 +22,8 @@ A production-ready Student Attendance System using Spring Boot 3, React + Vite, 
 1. **Java 17** Installed.
 2. **Node.js** (v16+) & **npm** Installed.
 3. **MySQL Server** running on localhost:3306.
-   - Create database: `smart_attendance_db` (optional, app will try to create).
-   - Update `backend/src/main/resources/application.properties` with your MySQL credentials (default: root/no-password).
+   - Create database: `smart_attendance` (optional, app will try to create).
+   - Copy `.env.example` values into your environment or IDE run configuration before starting the backend.
 
 ## 🏃‍♂️ How to Run
 
@@ -35,14 +35,18 @@ mvn spring-boot:run
 ```
 *Port: 8080*
 
-**Default Users (Created on Startup):**
-| Role | Username | Password |
-|------|----------|----------|
-| **Admin** | `admin` | `admin123` |
-| **Principal** | `PRN001` | `principal123` |
-| **HOD** | `HOD001` | `hod123` |
-| **Faculty** | `FAC001` | `faculty123` |
-| **Student** | `219X1A0501` | `student123` |
+**Demo Users (Created on Startup when `APP_SEED_ENABLED=true`):**
+| Role | Username | Password | Notes |
+|------|----------|----------|-------|
+| **Admin** | `admin` | `admin123` | System administrator |
+| **Principal** | `PRN001` | `principal123` | College principal |
+| **HOD** | `HOD001` | `hod123` | Computer Science |
+| **Faculty** | `FAC_CSE01` | `faculty123` | CS faculty |
+| **Student** | `22X1A0501` | `student123` | CSE UG (IV B.Tech) |
+| **Student** | `P23CSE001` | `student123` | M.Tech CSE (I year) |
+| **Student** | `MBA23001` | `student123` | MBA (I year) |
+
+Additional sample students and faculty are also seeded for dashboard/demo use.
 
 ### 2. Frontend
 
@@ -59,6 +63,12 @@ npm run dev
 2. **Login as Faculty** (You may need to manually add one to DB or via Admin API once built completely).
 3. **Start Session**: Faculty selects class -> Generate QR.
 4. **Login as Student**: Mobile view -> Scan QR -> Capture Face -> Submit.
+
+## 🧾 Seeded departments & credentials
+
+- The backend now creates 17 academic departments (UG + PG / professional programs) covering the JNTUA engineering portfolio (CSE, ECE, EEE, MECH, CIVIL, CHEM, IT, EIE, BIOTECH, MET, MINING plus MBA/MCA and all M.Tech streams).
+- Sample faculty and student accounts span those departments, so dashboards and role checks can exercise every route immediately after startup.
+- All seeded credentials (role, username, initial password) are written to `backend/seeded-users.txt` each time the seeder runs so you always have a single source of truth for demo logins.
 
 ## 📁 Project Structure
 

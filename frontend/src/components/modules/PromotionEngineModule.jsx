@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Card,
@@ -35,7 +35,7 @@ import {
     Cancel as CancelIcon,
     TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
-import { promotionAPI, departmentAPI, studentAPI } from '../../services/api';
+import { promotionAPI, departmentAPI } from '../../services/api';
 
 const PromotionEngineModule = ({ userDepartment }) => {
     const [departments, setDepartments] = useState([]);
@@ -49,27 +49,16 @@ const PromotionEngineModule = ({ userDepartment }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
-    useEffect(() => {
-        loadDepartments();
-    }, []);
-
-    useEffect(() => {
-        if (selectedDepartment && selectedSemester) {
-            loadEligibleStudents();
-            loadStatistics();
-        }
-    }, [selectedDepartment, selectedSemester, academicYear]);
-
-    const loadDepartments = async () => {
+    const loadDepartments = useCallback(async () => {
         try {
             const data = await departmentAPI.getActive();
             setDepartments(data);
         } catch (error) {
             console.error('Failed to load departments:', error);
         }
-    };
+    }, []);
 
-    const loadEligibleStudents = async () => {
+    const loadEligibleStudents = useCallback(async () => {
         try {
             setIsLoading(true);
             const data = await promotionAPI.getEligibleStudents(selectedDepartment, selectedSemester);
@@ -89,16 +78,27 @@ const PromotionEngineModule = ({ userDepartment }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [selectedDepartment, selectedSemester]);
 
-    const loadStatistics = async () => {
+    const loadStatistics = useCallback(async () => {
         try {
             const stats = await promotionAPI.getStatistics(selectedDepartment, academicYear);
             setStatistics(stats);
         } catch (error) {
             console.error('Failed to load statistics:', error);
         }
-    };
+    }, [selectedDepartment, academicYear]);
+
+    useEffect(() => {
+        void loadDepartments();
+    }, [loadDepartments]);
+
+    useEffect(() => {
+        if (selectedDepartment && selectedSemester) {
+            void loadEligibleStudents();
+            void loadStatistics();
+        }
+    }, [selectedDepartment, selectedSemester, academicYear, loadEligibleStudents, loadStatistics]);
 
     const handlePromotionDataChange = (rollNumber, field, value) => {
         setPromotionData(prev => ({

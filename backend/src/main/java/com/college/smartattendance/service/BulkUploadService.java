@@ -16,7 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
@@ -72,39 +75,25 @@ public class BulkUploadService {
         List<ValidationError> errors = new ArrayList<>();
         int totalRecords = 0;
 
-        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
-            Sheet sheet = workbook.getSheetAt(0);
-            Iterator<Row> rows = sheet.iterator();
-
-            // Skip header
-            if (rows.hasNext())
-                rows.next();
-
-            while (rows.hasNext()) {
-                Row currentRow = rows.next();
-                int rowNumber = currentRow.getRowNum() + 1;
+        try {
+            List<Map<String, String>> rows = parseFile(file);
+            for (Map<String, String> studentData : rows) {
+                int rowNumber = totalRecords + 2; // 1-indexed, skip header
                 totalRecords++;
-
                 try {
-                    Map<String, String> studentData = parseStudentRow(currentRow, rowNumber, errors);
-
-                    if (studentData != null) {
-                        // Additional validation
-                        validateStudentData(studentData, rowNumber, errors);
-
-                        if (errors.stream().noneMatch(e -> e.getRowNumber().equals(rowNumber))) {
-                            validRecords.add(new ValidRecordPreview(rowNumber, studentData));
-
-                            // Store temp data for confirm step
-                            String dataJson = objectMapper.writeValueAsString(studentData);
-                            TempUploadData tempData = new TempUploadData(log.getId(), rowNumber, dataJson);
-                            tempUploadDataRepository.save(tempData);
-                        }
+                    validateStudentData(studentData, rowNumber, errors);
+                    if (errors.stream().noneMatch(e -> e.getRowNumber().equals(rowNumber))) {
+                        validRecords.add(new ValidRecordPreview(rowNumber, studentData));
+                        String dataJson = objectMapper.writeValueAsString(studentData);
+                        TempUploadData tempData = new TempUploadData(log.getId(), rowNumber, dataJson);
+                        tempUploadDataRepository.save(tempData);
                     }
                 } catch (Exception e) {
                     errors.add(new ValidationError(rowNumber, "GENERAL", "Parse error: " + e.getMessage()));
                 }
             }
+        } catch (Exception e) {
+            errors.add(new ValidationError(0, "FILE", "Could not read file: " + e.getMessage()));
         }
 
         result.setTotalRecords(totalRecords);
@@ -264,33 +253,25 @@ public class BulkUploadService {
         List<ValidationError> errors = new ArrayList<>();
         int totalRecords = 0;
 
-        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
-            Sheet sheet = workbook.getSheetAt(0);
-            Iterator<Row> rows = sheet.iterator();
-
-            // Skip header
-            if (rows.hasNext())
-                rows.next();
-
-            while (rows.hasNext()) {
-                Row currentRow = rows.next();
-                int rowNumber = currentRow.getRowNum() + 1;
+        try {
+            List<Map<String, String>> rows = parseFile(file);
+            for (Map<String, String> facultyData : rows) {
+                int rowNumber = totalRecords + 2;
                 totalRecords++;
-
                 try {
-                    Map<String, String> facultyData = parseFacultyRow(currentRow, rowNumber, errors);
-
-                    if (facultyData != null) {
-                        validateFacultyData(facultyData, rowNumber, errors);
-
-                        if (errors.stream().noneMatch(e -> e.getRowNumber().equals(rowNumber))) {
-                            validRecords.add(new ValidRecordPreview(rowNumber, facultyData));
-                        }
+                    validateFacultyData(facultyData, rowNumber, errors);
+                    if (errors.stream().noneMatch(e -> e.getRowNumber().equals(rowNumber))) {
+                        validRecords.add(new ValidRecordPreview(rowNumber, facultyData));
+                        String dataJson = objectMapper.writeValueAsString(facultyData);
+                        TempUploadData tempData = new TempUploadData(log.getId(), rowNumber, dataJson);
+                        tempUploadDataRepository.save(tempData);
                     }
                 } catch (Exception e) {
                     errors.add(new ValidationError(rowNumber, "GENERAL", "Parse error: " + e.getMessage()));
                 }
             }
+        } catch (Exception e) {
+            errors.add(new ValidationError(0, "FILE", "Could not read file: " + e.getMessage()));
         }
 
         result.setTotalRecords(totalRecords);
@@ -385,7 +366,105 @@ public class BulkUploadService {
         }
     }
 
-    // ==================== PARSING METHODS ====================
+    // ==================== FILE TYPE DETECTION ====================
+
+    /**
+     * Detects whether the uploaded file is CSV or XLSX and returns
+     * a list of row maps keyed by the header column names.
+     */
+    private List<Map<String, String>> parseFile(MultipartFile file) throws IOException {
+        String name = file.getOriginalFilename();
+        if (name != null && name.toLowerCase().endsWith(".csv")) {
+            return parseCsv(file);
+        } else {
+            return parseXlsx(file);
+        }
+    }
+
+    /** Parse CSV — first row is header, remaining rows are data */
+    private List<Map<String, String>> parseCsv(MultipartFile file) throws IOException {
+        List<Map<String, String>> result = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) return result;
+            String[] headers = headerLine.split(",", -1);
+            for (int i = 0; i < headers.length; i++) headers[i] = headers[i].trim();
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) continue;
+                String[] values = line.split(",", -1);
+                Map<String, String> row = new LinkedHashMap<>();
+                for (int i = 0; i < headers.length; i++) {
+                    row.put(headers[i], i < values.length ? values[i].trim() : "");
+                }
+                // Map CSV column names to the internal keys expected by validate methods
+                normalizeKeys(row);
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
+    /** Parse XLSX — first row is header, remaining rows are data */
+    private List<Map<String, String>> parseXlsx(MultipartFile file) throws IOException {
+        List<Map<String, String>> result = new ArrayList<>();
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Iterator<Row> rowIter = sheet.iterator();
+            if (!rowIter.hasNext()) return result;
+
+            // Read header row
+            Row headerRow = rowIter.next();
+            List<String> headers = new ArrayList<>();
+            for (Cell cell : headerRow) headers.add(getCellValue(cell).trim());
+
+            while (rowIter.hasNext()) {
+                Row currentRow = rowIter.next();
+                Map<String, String> row = new LinkedHashMap<>();
+                for (int i = 0; i < headers.size(); i++) {
+                    row.put(headers.get(i), getCellValue(currentRow.getCell(i)));
+                }
+                normalizeKeys(row);
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Normalises common alternate column name spellings to the internal keys
+     * that validateStudentData / validateFacultyData expect.
+     */
+    private void normalizeKeys(Map<String, String> row) {
+        remap(row, "fullName",        "firstName", "lastName");  // handled below
+        remap(row, "mobile",          "contactNumber", "phone", "mobileNumber");
+        remap(row, "semester",        "currentSemester");
+        remap(row, "program",         "programType");
+        // If firstName+lastName present but fullName missing, build fullName
+        if (!row.containsKey("fullName") && row.containsKey("firstName")) {
+            String fn = row.getOrDefault("firstName", "");
+            String ln = row.getOrDefault("lastName", "");
+            row.put("fullName", (fn + " " + ln).trim());
+        }
+        // If fullName present but firstName missing, split it
+        if (row.containsKey("fullName") && !row.containsKey("firstName")) {
+            String[] parts = row.get("fullName").split(" ", 2);
+            row.putIfAbsent("firstName", parts[0]);
+            row.putIfAbsent("lastName", parts.length > 1 ? parts[1] : "");
+        }
+    }
+
+    /** Copy value from any of the altKeys into key if key is missing */
+    private void remap(Map<String, String> row, String key, String... altKeys) {
+        if (row.containsKey(key)) return;
+        for (String alt : altKeys) {
+            if (row.containsKey(alt)) { row.put(key, row.get(alt)); return; }
+        }
+    }
+
+    // ==================== PARSING METHODS (legacy, kept for reference) ====================
 
     private Map<String, String> parseStudentRow(Row row, int rowNumber, List<ValidationError> errors) {
         Map<String, String> data = new HashMap<>();

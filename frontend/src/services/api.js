@@ -46,13 +46,13 @@ export const loginUser = async (credentials) => {
     return response.data;
 };
 
-export const changePassword = async (passwordData) => {
-    const response = await apiClient.post('/auth/change-password', passwordData);
+export const changePassword = async (oldPassword, newPassword) => {
+    const response = await apiClient.post('/users/change-password', { oldPassword, newPassword });
     return response.data;
 };
 
 export const getCurrentUser = async () => {
-    const response = await apiClient.get('/auth/me');
+    const response = await apiClient.get('/me');
     return response.data;
 };
 
@@ -116,11 +116,49 @@ export const createSession = async (sessionData) => {
     return response.data;
 };
 
+export const refreshSessionQr = async (sessionId) => {
+    const response = await apiClient.post(`/faculty/sessions/${sessionId}/refresh-qr`);
+    return response.data;
+};
+
+export const endSession = async (sessionId) => {
+    const response = await apiClient.post(`/faculty/sessions/${sessionId}/end`);
+    return response.data;
+};
+
+export const getSessionAttendanceCount = async (sessionId) => {
+    const response = await apiClient.get(`/faculty/sessions/${sessionId}/count`);
+    return response.data;
+};
+
 export const markManualAttendance = async (attendanceData) => {
     const response = await apiClient.post('/faculty/attendance/manual', attendanceData);
     return response.data;
 };
 
+export const getSessionAttendance = async (sessionId) => {
+    const response = await apiClient.get(`/faculty/sessions/${sessionId}/attendance`);
+    return response.data;
+};
+
+export const updateAttendanceStatus = async (recordId, status, remarks) => {
+    const response = await apiClient.patch(`/faculty/attendance/${recordId}/status`, { status, remarks });
+    return response.data;
+};
+
+// ==================== QR ATTENDANCE API (Student) ====================
+
+export const markQrAttendance = async (qrData) => {
+    const response = await apiClient.post('/student/qr-attendance', qrData);
+    return response.data;
+};
+
+export const getSessionInfoByQr = async (qrToken) => {
+    const response = await apiClient.get('/student/session-info', {
+        params: { qrToken }
+    });
+    return response.data;
+};
 
 // ==================== BULK UPLOAD API ====================
 
@@ -165,69 +203,48 @@ export const bulkUploadAPI = {
 // ==================== STUDENT MANAGEMENT API ====================
 
 export const studentAPI = {
-    // Get all students
     getAll: async () => {
         const response = await apiClient.get('/students');
         return response.data;
     },
-
-    // Get student by ID
     getById: async (id) => {
         const response = await apiClient.get(`/students/${id}`);
         return response.data;
     },
-
-    // Get student by roll number
     getByRollNumber: async (rollNumber) => {
         const response = await apiClient.get(`/students/roll/${rollNumber}`);
         return response.data;
     },
-
-    // Get students by department
     getByDepartment: async (departmentCode) => {
         const response = await apiClient.get(`/students/department/${departmentCode}`);
         return response.data;
     },
-
-    // Get students by semester
     getBySemester: async (semester) => {
         const response = await apiClient.get(`/students/semester/${semester}`);
         return response.data;
     },
-
-    // Get students by status
     getByStatus: async (status) => {
         const response = await apiClient.get(`/students/status/${status}`);
         return response.data;
     },
-
-    // Get students by department and semester
     getByDepartmentAndSemester: async (departmentCode, semester) => {
         const response = await apiClient.get(`/students/department/${departmentCode}/semester/${semester}`);
         return response.data;
     },
-
-    // Create student
     create: async (studentData) => {
         const response = await apiClient.post('/students', studentData);
         return response.data;
     },
-
-    // Update student
     update: async (id, studentData) => {
         const response = await apiClient.put(`/students/${id}`, studentData);
         return response.data;
     },
-
-    // Update student status
     updateStatus: async (id, status) => {
         const response = await apiClient.patch(`/students/${id}/status`, null, {
             params: { status },
         });
         return response.data;
     },
-
-    // Delete student (soft delete)
     delete: async (id) => {
         const response = await apiClient.delete(`/students/${id}`);
         return response.data;
@@ -237,63 +254,44 @@ export const studentAPI = {
 // ==================== FACULTY MANAGEMENT API ====================
 
 export const facultyAPI = {
-    // Get all faculty
     getAll: async () => {
         const response = await apiClient.get('/faculty');
         return response.data;
     },
-
-    // Get faculty by ID
     getById: async (id) => {
         const response = await apiClient.get(`/faculty/${id}`);
         return response.data;
     },
-
-    // Get faculty by faculty ID
     getByFacultyId: async (facultyId) => {
         const response = await apiClient.get(`/faculty/faculty-id/${facultyId}`);
         return response.data;
     },
-
-    // Get faculty by department
     getByDepartment: async (departmentCode) => {
         const response = await apiClient.get(`/faculty/department/${departmentCode}`);
         return response.data;
     },
-
-    // Get faculty by status
     getByStatus: async (status) => {
         const response = await apiClient.get(`/faculty/status/${status}`);
         return response.data;
     },
-
-    // Get faculty by role
     getByRole: async (role) => {
         const response = await apiClient.get(`/faculty/role/${role}`);
         return response.data;
     },
-
-    // Create faculty
     create: async (facultyData) => {
         const response = await apiClient.post('/faculty', facultyData);
         return response.data;
     },
-
-    // Update faculty
     update: async (id, facultyData) => {
         const response = await apiClient.put(`/faculty/${id}`, facultyData);
         return response.data;
     },
-
-    // Update faculty status
     updateStatus: async (id, status) => {
         const response = await apiClient.patch(`/faculty/${id}/status`, null, {
             params: { status },
         });
         return response.data;
     },
-
-    // Delete faculty (soft delete)
     delete: async (id) => {
         const response = await apiClient.delete(`/faculty/${id}`);
         return response.data;
@@ -303,37 +301,28 @@ export const facultyAPI = {
 // ==================== PROMOTION API ====================
 
 export const promotionAPI = {
-    // Execute promotion
     execute: async (departmentCode, currentSemester, academicYear, promotionData) => {
         const response = await apiClient.post('/promotion/execute', promotionData, {
             params: { departmentCode, currentSemester, academicYear },
         });
         return response.data;
     },
-
-    // Reverse promotion
     reverse: async (departmentCode, semester, academicYear) => {
         const response = await apiClient.post('/promotion/reverse', null, {
             params: { departmentCode, semester, academicYear },
         });
         return response.data;
     },
-
-    // Get eligible students
     getEligibleStudents: async (departmentCode, semester) => {
         const response = await apiClient.get('/promotion/eligible', {
             params: { departmentCode, semester },
         });
         return response.data;
     },
-
-    // Get student promotion history
     getStudentHistory: async (studentId) => {
         const response = await apiClient.get(`/promotion/history/student/${studentId}`);
         return response.data;
     },
-
-    // Get promotion statistics
     getStatistics: async (departmentCode, academicYear) => {
         const response = await apiClient.get('/promotion/statistics', {
             params: { departmentCode, academicYear },
@@ -345,83 +334,58 @@ export const promotionAPI = {
 // ==================== DEPARTMENT API ====================
 
 export const departmentAPI = {
-    // Get all departments
     getAll: async () => {
         const response = await apiClient.get('/departments');
         return response.data;
     },
-
-    // Get active departments
     getActive: async () => {
         const response = await apiClient.get('/departments/active');
         return response.data;
     },
-
-    // Get department by ID
     getById: async (id) => {
         const response = await apiClient.get(`/departments/${id}`);
         return response.data;
     },
-
-    // Get department by code
     getByCode: async (code) => {
         const response = await apiClient.get(`/departments/code/${code}`);
         return response.data;
     },
-
-    // Create department
     create: async (departmentData) => {
         const response = await apiClient.post('/departments', departmentData);
         return response.data;
     },
-
-    // Update department
     update: async (id, departmentData) => {
         const response = await apiClient.put(`/departments/${id}`, departmentData);
         return response.data;
     },
-
-    // Set department status
     setStatus: async (id, active) => {
         const response = await apiClient.patch(`/departments/${id}/status`, null, {
             params: { active },
         });
         return response.data;
     },
-
-    // Set HOD
     setHOD: async (departmentId, facultyId) => {
         const response = await apiClient.patch(`/departments/${departmentId}/hod/${facultyId}`);
         return response.data;
     },
-
-    // Get programs by department
     getProgramsByDepartment: async (departmentId) => {
         const response = await apiClient.get(`/departments/${departmentId}/programs`);
         return response.data;
     },
-
-    // Get all programs
     getAllPrograms: async () => {
         const response = await apiClient.get('/departments/programs');
         return response.data;
     },
-
-    // Get active programs
     getActivePrograms: async () => {
         const response = await apiClient.get('/departments/programs/active');
         return response.data;
     },
-
-    // Create program
     createProgram: async (departmentId, code, name, type, duration) => {
         const response = await apiClient.post(`/departments/${departmentId}/programs`, null, {
             params: { code, name, type, duration },
         });
         return response.data;
     },
-
-    // Set program status
     setProgramStatus: async (programId, active) => {
         const response = await apiClient.patch(`/departments/programs/${programId}/status`, null, {
             params: { active },
@@ -433,85 +397,60 @@ export const departmentAPI = {
 // ==================== SUBJECT ELIGIBILITY & ASSIGNMENT API ====================
 
 export const subjectAPI = {
-    // Add eligibility
     addEligibility: async (facultyId, subjectId) => {
         const response = await apiClient.post('/subjects/eligibility', null, {
             params: { facultyId, subjectId },
         });
         return response.data;
     },
-
-    // Remove eligibility
     removeEligibility: async (eligibilityId) => {
         const response = await apiClient.delete(`/subjects/eligibility/${eligibilityId}`);
         return response.data;
     },
-
-    // Get eligible subjects for faculty
     getEligibleSubjects: async (facultyId) => {
         const response = await apiClient.get(`/subjects/eligibility/faculty/${facultyId}/subjects`);
         return response.data;
     },
-
-    // Get eligible faculty for subject
     getEligibleFaculty: async (subjectId) => {
         const response = await apiClient.get(`/subjects/eligibility/subject/${subjectId}/faculty`);
         return response.data;
     },
-
-    // Bulk add eligibilities
     bulkAddEligibilities: async (facultyId, subjectIds) => {
         const response = await apiClient.post('/subjects/eligibility/bulk', subjectIds, {
             params: { facultyId },
         });
         return response.data;
     },
-
-    // Assign subject
     assignSubject: async (facultyId, subjectId, section, academicYear, semester) => {
         const response = await apiClient.post('/subjects/assignments', null, {
             params: { facultyId, subjectId, section, academicYear, semester },
         });
         return response.data;
     },
-
-    // Unassign subject
     unassignSubject: async (assignmentId) => {
         const response = await apiClient.delete(`/subjects/assignments/${assignmentId}`);
         return response.data;
     },
-
-    // Lock assignment
     lockAssignment: async (assignmentId) => {
         const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/lock`);
         return response.data;
     },
-
-    // Unlock assignment
     unlockAssignment: async (assignmentId) => {
         const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/unlock`);
         return response.data;
     },
-
-    // Get faculty assignments
     getFacultyAssignments: async (facultyId) => {
         const response = await apiClient.get(`/subjects/assignments/faculty/${facultyId}`);
         return response.data;
     },
-
-    // Get subject assignments
     getSubjectAssignments: async (subjectId) => {
         const response = await apiClient.get(`/subjects/assignments/subject/${subjectId}`);
         return response.data;
     },
-
-    // Get faculty workload
     getFacultyWorkload: async (facultyId) => {
         const response = await apiClient.get(`/subjects/assignments/faculty/${facultyId}/workload`);
         return response.data;
     },
-
-    // Reassign subject
     reassignSubject: async (assignmentId, newFacultyId) => {
         const response = await apiClient.patch(`/subjects/assignments/${assignmentId}/reassign`, null, {
             params: { newFacultyId },
@@ -589,6 +528,17 @@ export const removeProfileImage = async () => {
 export const updateUserProfile = async (profileData) => {
     const response = await apiClient.put('/me', profileData);
     return response.data;
+};
+
+export const adminDataAPI = {
+    request: async (method, path, body) => {
+        const response = await apiClient.request({
+            method,
+            url: `/admin/data${path}`,
+            data: body,
+        });
+        return response.data;
+    },
 };
 
 export default apiClient;

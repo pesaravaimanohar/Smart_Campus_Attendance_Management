@@ -25,7 +25,7 @@ const Login = () => {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    useMediaQuery(theme.breakpoints.down('md'));
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -47,7 +47,7 @@ const Login = () => {
             else if (data.role === "PRINCIPAL") navigate("/principal");
             else if (data.role === "ADMIN") navigate("/admin");
             else navigate("/");
-        } catch (err) {
+        } catch {
             setError("Invalid credentials. Please verify your ID or password.");
         } finally {
             setLoading(false);

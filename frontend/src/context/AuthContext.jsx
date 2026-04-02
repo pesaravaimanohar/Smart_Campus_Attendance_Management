@@ -3,29 +3,39 @@ import { jwtDecode } from "jwt-decode";
 
 const AuthContext = createContext();
 
+const parseStoredToken = (token) => {
+    try {
+        const decoded = jwtDecode(token);
+        if (decoded.exp * 1000 < Date.now()) {
+            return null;
+        }
+        return { ...decoded, token };
+    } catch {
+        if (token.startsWith("mock-token-")) {
+            const role = token.replace("mock-token-", "").toUpperCase();
+            return { sub: "mockUser", role, token };
+        }
+        return null;
+    }
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const logout = () => {
+        localStorage.removeItem("token");
+        setUser(null);
+    };
+
     useEffect(() => {
         const token = localStorage.getItem("token");
         if (token) {
-            try {
-                const decoded = jwtDecode(token);
-                // Check expiry
-                if (decoded.exp * 1000 < Date.now()) {
-                    logout();
-                } else {
-                    setUser({ ...decoded, token });
-                }
-            } catch (e) {
-                // Handle Mock Tokens for development
-                if (token.startsWith("mock-token-")) {
-                    const role = token.replace("mock-token-", "").toUpperCase();
-                    setUser({ sub: "mockUser", role: role, token });
-                } else {
-                    logout();
-                }
+            const parsedUser = parseStoredToken(token);
+            if (parsedUser) {
+                setUser(parsedUser);
+            } else {
+                logout();
             }
         }
         setLoading(false);
@@ -33,23 +43,13 @@ export const AuthProvider = ({ children }) => {
 
     const login = (token) => {
         localStorage.setItem("token", token);
-        try {
-            const decoded = jwtDecode(token);
-            setUser({ ...decoded, token });
-        } catch (e) {
-            // Handle Mock Tokens
-            if (token.startsWith("mock-token-")) {
-                const role = token.replace("mock-token-", "").toUpperCase();
-                setUser({ sub: "mockUser", role: role, token });
-            } else {
-                console.error("Invalid token", e);
-            }
+        const parsedUser = parseStoredToken(token);
+        if (parsedUser) {
+            setUser(parsedUser);
+        } else {
+            console.error("Invalid token");
+            logout();
         }
-    };
-
-    const logout = () => {
-        localStorage.removeItem("token");
-        setUser(null);
     };
 
     return (

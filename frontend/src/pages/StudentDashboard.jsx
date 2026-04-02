@@ -7,9 +7,10 @@ import {
     useTheme, Fade, Dialog, LinearProgress, Badge, Drawer, Alert, Stack
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { useMediaQuery } from "@mui/material";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import {
-    markAttendance, getStudentAnalytics, getStudentSubjects, getSubjectAttendance,
+    markAttendance, getStudentAnalytics, getStudentSubjects,
     getAttendanceStatus, getTodaySessions, getAttendanceHistory, getStudentAlerts
 } from "../services/api";
 import {
@@ -37,18 +38,20 @@ import ChangePasswordDialog from '../components/ChangePasswordDialog';
 import GlobalHeader from '../components/GlobalHeader';
 import UserProfileMenu from '../components/UserProfileMenu';
 import GreetingWidget from '../components/GreetingWidget';
+import ScanAttendance from './ScanAttendance';
 
 const StudentDashboard = () => {
     const { logout, user } = useAuth();
     const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
 
     // UI State
     const [activeSection, setActiveSection] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
+    const [showScanPage, setShowScanPage] = useState(false);
     const [openChangePassword, setOpenChangePassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [dataLoading, setDataLoading] = useState(true);
 
     // Scanner State
     const [scanResult, setScanResult] = useState(null);
@@ -81,7 +84,6 @@ const StudentDashboard = () => {
     }, []);
 
     const fetchAllData = async () => {
-        setDataLoading(true);
         try {
             const [analyticsData, statusData, sessionsData, historyData, alertsData, subjectsData] = await Promise.all([
                 getStudentAnalytics(),
@@ -100,8 +102,6 @@ const StudentDashboard = () => {
             setSubjects(subjectsData);
         } catch (error) {
             console.error("Failed to load dashboard data", error);
-        } finally {
-            setDataLoading(false);
         }
     };
 
@@ -137,7 +137,7 @@ const StudentDashboard = () => {
                 }
             }
 
-            function onScanFailure(error) {
+            function onScanFailure() {
                 // Silent
             }
         }
@@ -217,6 +217,7 @@ const StudentDashboard = () => {
             <List sx={{ flexGrow: 1, px: 2, py: 2 }}>
                 {[
                     { id: 'dashboard', icon: <DashboardIcon />, label: 'Dashboard' },
+                    { id: 'scanqr', icon: <QrCodeScannerIcon />, label: 'Scan QR Code', highlight: true },
                     { id: 'classes', icon: <CalendarIcon />, label: 'My Classes' },
                     { id: 'history', icon: <HistoryIcon />, label: 'History' },
                     { id: 'profile', icon: <PersonIcon />, label: 'Profile' },
@@ -224,19 +225,33 @@ const StudentDashboard = () => {
                     <ListItem
                         button
                         key={item.id}
-                        onClick={() => { setActiveSection(item.id); setSidebarOpen(false); }}
+                        onClick={() => {
+                            if (item.id === 'scanqr') {
+                                setShowScanPage(true);
+                            } else {
+                                setActiveSection(item.id);
+                                setShowScanPage(false);
+                            }
+                            setSidebarOpen(false);
+                        }}
                         sx={{
                             borderRadius: 2,
                             mb: 0.5,
-                            bgcolor: activeSection === item.id ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
-                            color: activeSection === item.id ? 'primary.main' : 'text.secondary',
-                            '&:hover': { bgcolor: activeSection === item.id ? alpha(theme.palette.primary.main, 0.15) : 'action.hover' }
+                            bgcolor: item.highlight
+                                ? undefined
+                                : activeSection === item.id ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                            background: item.highlight ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)` : undefined,
+                            color: item.highlight ? 'white' : activeSection === item.id ? 'primary.main' : 'text.secondary',
+                            '&:hover': {
+                                background: item.highlight ? `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)` : undefined,
+                                bgcolor: !item.highlight ? (activeSection === item.id ? alpha(theme.palette.primary.main, 0.15) : 'action.hover') : undefined,
+                            }
                         }}
                     >
                         <Box component="span" sx={{ mr: 1.5, display: 'flex' }}>
                             {item.icon}
                         </Box>
-                        <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: activeSection === item.id ? 700 : 500 }} />
+                        <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: item.highlight || activeSection === item.id ? 700 : 500 }} />
                     </ListItem>
                 ))}
             </List>
@@ -263,7 +278,7 @@ const StudentDashboard = () => {
     );
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#fafafa' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
             <GlobalHeader />
             <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
                 {/* Desktop Sidebar */}
@@ -305,7 +320,10 @@ const StudentDashboard = () => {
                     </AppBar>
 
                     {/* Main Content Area */}
-                    <Box sx={{ flexGrow: 1, overflow: 'auto', p: { xs: 2, md: 4 } }}>
+                    <Box sx={{ flexGrow: 1, overflow: 'auto', p: showScanPage ? 0 : { xs: 2, md: 4 } }}>
+                        {showScanPage ? (
+                            <ScanAttendance onBack={() => { setShowScanPage(false); fetchAllData(); }} />
+                        ) : (
                         <Container maxWidth="xl" disableGutters>
                             {activeSection === 'dashboard' && (
                                 <Stack spacing={3}>
@@ -485,7 +503,7 @@ const StudentDashboard = () => {
                                         </TableContainer>
                                     </Paper>
 
-                                    {/* 4. SMART INSIGHTS - Refined */}
+                                    {/* 4. SMART INSIGHTS */}
                                     <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                             <TrendingUpIcon color="primary" />
@@ -514,7 +532,7 @@ const StudentDashboard = () => {
                                         </Grid>
                                     </Paper>
 
-                                    {/* 5. QUICK ACTIONS - Compact */}
+                                    {/* 5. QUICK ACTIONS */}
                                     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
                                         <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5 }}>
                                             Quick Actions
@@ -580,7 +598,7 @@ const StudentDashboard = () => {
                                                                 variant="contained"
                                                                 size="small"
                                                                 startIcon={<QrCodeScannerIcon />}
-                                                                onClick={() => setShowScanner(true)}
+                                                                onClick={() => setShowScanPage(true)}
                                                             >
                                                                 Scan
                                                             </Button>
@@ -644,6 +662,7 @@ const StudentDashboard = () => {
                                 </Paper>
                             )}
                         </Container>
+                        )}
                     </Box>
                 </Box>
             </Box>
@@ -714,7 +733,7 @@ const StudentDashboard = () => {
             <ChangePasswordDialog open={openChangePassword} onClose={() => setOpenChangePassword(false)} />
 
             {/* Floating Action Button for Quick Scan */}
-            {activeSection === 'dashboard' && todaySessions.some(s => s.status === 'Open') && (
+            {!showScanPage && activeSection === 'dashboard' && (
                 <Box
                     sx={{
                         position: 'fixed',
@@ -728,17 +747,18 @@ const StudentDashboard = () => {
                         color="primary"
                         size="large"
                         startIcon={<QrCodeScannerIcon />}
-                        onClick={() => setShowScanner(true)}
+                        onClick={() => setShowScanPage(true)}
                         sx={{
                             borderRadius: 2,
                             px: 3,
                             py: 1.5,
                             fontWeight: 700,
                             boxShadow: 4,
-                            '&:hover': { boxShadow: 8 }
+                            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                            '&:hover': { boxShadow: 8, background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)` }
                         }}
                     >
-                        Mark Attendance
+                        Scan QR & Mark Attendance
                     </Button>
                 </Box>
             )}

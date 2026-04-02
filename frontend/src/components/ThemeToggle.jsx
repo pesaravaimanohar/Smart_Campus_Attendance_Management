@@ -26,7 +26,7 @@ const ToggleSwitch = styled('div')(({ theme }) => ({
     },
 }));
 
-const Knob = styled('div')(({ theme, mode }) => ({
+const Knob = styled('div')(({ mode }) => ({
     width: 26,
     height: 26,
     borderRadius: '50%',

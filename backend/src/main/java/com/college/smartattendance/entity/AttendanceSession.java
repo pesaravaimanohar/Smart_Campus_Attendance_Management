@@ -23,6 +23,9 @@ public class AttendanceSession {
     private Double longitude;
     private Double radius;
 
+    @Column(unique = true)
+    private String qrToken;
+
     public AttendanceSession() {
     }
 
@@ -88,5 +91,13 @@ public class AttendanceSession {
 
     public void setRadius(Double radius) {
         this.radius = radius;
+    }
+
+    public String getQrToken() {
+        return qrToken;
+    }
+
+    public void setQrToken(String qrToken) {
+        this.qrToken = qrToken;
     }
 }

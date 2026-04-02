@@ -6,7 +6,6 @@ import { ColorModeProvider } from "./context/ThemeContext";
 import Login from "./pages/Login";
 import StudentDashboard from "./pages/StudentDashboard";
 import FacultyDashboard from "./pages/FacultyDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
 import AdminDashboardNew from "./pages/AdminDashboardNew";
 import HODDashboard from "./pages/HODDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";

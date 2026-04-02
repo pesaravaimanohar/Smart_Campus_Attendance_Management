@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Container, Box, Typography, TextField, Button, Paper, Alert, Fade } from '@mui/material';
+import { Container, Box, Typography, TextField, Button, Paper, Alert, Fade, useTheme } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import { changePassword } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +17,8 @@ const ChangePassword = () => {
     const [loading, setLoading] = useState(false);
     const { logout } = useAuth();
     const navigate = useNavigate();
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -58,8 +61,10 @@ const ChangePassword = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-                position: 'relative' // Added for absolute positioning context
+                background: isDark
+                    ? `linear-gradient(135deg, ${theme.palette.background.default} 0%, ${alpha(theme.palette.primary.main, 0.1)} 100%)`
+                    : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+                position: 'relative'
             }}
         >
             <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
@@ -73,15 +78,19 @@ const ChangePassword = () => {
                             p: 4,
                             borderRadius: 4,
                             backdropFilter: 'blur(10px)',
-                            background: 'rgba(255, 255, 255, 0.95)',
-                            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.15)'
+                            background: isDark
+                                ? alpha(theme.palette.background.paper, 0.95)
+                                : 'rgba(255, 255, 255, 0.95)',
+                            boxShadow: isDark
+                                ? `0 8px 32px ${alpha(theme.palette.common.black, 0.3)}`
+                                : '0 8px 32px 0 rgba(31, 38, 135, 0.15)'
                         }}
                     >
                         <Box display="flex" flexDirection="column" alignItems="center" mb={3}>
                             <Box
                                 sx={{
                                     p: 2,
-                                    bgcolor: '#e8eaf6',
+                                    bgcolor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
                                     borderRadius: '50%',
                                     mb: 2,
                                     color: 'primary.main',
@@ -90,7 +99,7 @@ const ChangePassword = () => {
                             >
                                 <LockResetIcon fontSize="large" color="inherit" />
                             </Box>
-                            <Typography component="h1" variant="h5" fontWeight="800" color="#333">
+                            <Typography component="h1" variant="h5" fontWeight="800" color="text.primary">
                                 Set New Password
                             </Typography>
                             <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1, maxWidth: 280 }}>

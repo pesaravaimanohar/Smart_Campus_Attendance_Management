@@ -1,5 +1,6 @@
 package com.college.smartattendance.service;
 
+import com.college.smartattendance.dto.SessionInfoDto;
 import com.college.smartattendance.entity.*;
 import com.college.smartattendance.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AttendanceService {
@@ -25,12 +27,25 @@ public class AttendanceService {
         @Autowired
         private FacultySubjectMapRepository facultySubjectMapRepository;
 
+        @Autowired
+        private StudentClassMapRepository studentClassMapRepository;
+
         @Transactional
         public AttendanceSession createSession(Long facultySubjectMapId, Double lat, Double lon,
                         Integer durationMinutes,
                         Double radius) {
                 FacultySubjectMap map = facultySubjectMapRepository.findById(facultySubjectMapId)
                                 .orElseThrow(() -> new RuntimeException("Mapping not found"));
+
+                // Deactivate any existing active sessions for this mapping
+                List<AttendanceSession> activeSessions = sessionRepository.findByFacultySubjectMap_Id(facultySubjectMapId);
+                for (AttendanceSession s : activeSessions) {
+                        if (s.isActive()) {
+                                s.setActive(false);
+                                s.setEndTime(LocalDateTime.now());
+                                sessionRepository.save(s);
+                        }
+                }
 
                 AttendanceSession session = new AttendanceSession();
                 session.setFacultySubjectMap(map);
@@ -40,8 +55,151 @@ public class AttendanceService {
                 session.setLatitude(lat);
                 session.setLongitude(lon);
                 session.setRadius(radius != null ? radius : 50.0);
+                session.setQrToken(UUID.randomUUID().toString());
 
                 return sessionRepository.save(session);
+        }
+
+        @Transactional
+        public AttendanceSession refreshQrToken(Long sessionId) {
+                AttendanceSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                if (!session.isActive()) {
+                        throw new RuntimeException("Session is not active");
+                }
+
+                session.setQrToken(UUID.randomUUID().toString());
+                return sessionRepository.save(session);
+        }
+
+        @Transactional
+        public AttendanceSession endSession(Long sessionId) {
+                AttendanceSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                session.setActive(false);
+                session.setEndTime(LocalDateTime.now());
+                session.setQrToken(null);
+                return sessionRepository.save(session);
+        }
+
+        public SessionInfoDto getSessionInfoByQrToken(String qrToken) {
+                AttendanceSession session = sessionRepository.findByQrToken(qrToken)
+                                .orElseThrow(() -> new RuntimeException("Invalid QR code. Session not found."));
+
+                if (!session.isActive() || LocalDateTime.now().isAfter(session.getEndTime())) {
+                        throw new RuntimeException("This session has expired.");
+                }
+
+                FacultySubjectMap map = session.getFacultySubjectMap();
+                User facultyUser = map.getFaculty().getUser();
+
+                SessionInfoDto dto = new SessionInfoDto();
+                dto.setSessionId(session.getId());
+                dto.setSubjectName(map.getSubject().getName());
+                dto.setSubjectCode(map.getSubject().getCode());
+                dto.setClassName(map.getCourseClass().getName());
+                String fullName = (facultyUser.getFirstName() != null ? facultyUser.getFirstName() : "")
+                                + " " + (facultyUser.getLastName() != null ? facultyUser.getLastName() : "");
+                dto.setFacultyName(fullName.trim());
+                dto.setStartTime(session.getStartTime());
+                dto.setEndTime(session.getEndTime());
+                dto.setActive(true);
+                dto.setQrToken(session.getQrToken());
+                dto.setAttendanceCount(recordRepository.findBySession(session).size());
+
+                return dto;
+        }
+
+        @Transactional
+        public AttendanceRecord validateAndMarkByQr(Long studentId, String qrToken, Double lat, Double lon) {
+                // 1. Find session by QR token
+                AttendanceSession session = sessionRepository.findByQrToken(qrToken)
+                                .orElseThrow(() -> new RuntimeException("Invalid QR code. Please scan again."));
+
+                // 2. Check session is active
+                if (!session.isActive() || LocalDateTime.now().isAfter(session.getEndTime())) {
+                        throw new RuntimeException("This attendance session has expired.");
+                }
+
+                // 3. Get student
+                Student student = studentRepository.findById(studentId)
+                                .orElseThrow(() -> new RuntimeException("Student not found"));
+
+                // 4. Check if student belongs to this class
+                FacultySubjectMap map = session.getFacultySubjectMap();
+                CourseClass sessionClass = map.getCourseClass();
+
+                boolean belongsToClass = checkStudentBelongsToClass(student, sessionClass, map.getSection());
+
+                if (!belongsToClass) {
+                        throw new RuntimeException("You are not enrolled in this class. Only " 
+                                        + sessionClass.getName() + " students can mark attendance for this session.");
+                }
+
+                // 5. Check if already marked
+                Optional<AttendanceRecord> existing = recordRepository.findBySessionAndStudent(session, student);
+                if (existing.isPresent()) {
+                        return existing.get(); // Already marked, return existing
+                }
+
+                // 6. Validate Location
+                double distance = calculateDistance(lat, lon, session.getLatitude(), session.getLongitude());
+                AttendanceStatus status = AttendanceStatus.PRESENT;
+                String remarks = "QR Verified";
+
+                if (distance > session.getRadius()) {
+                        status = AttendanceStatus.REJECTED;
+                        remarks = "Location Mismatch: " + String.format("%.2f", distance) + "m away (max: " + session.getRadius() + "m)";
+                }
+
+                // 7. Create attendance record
+                AttendanceRecord record = new AttendanceRecord();
+                record.setSession(session);
+                record.setStudent(student);
+                record.setTimestamp(LocalDateTime.now());
+                record.setStatus(status);
+                record.setRemarks(remarks);
+
+                return recordRepository.save(record);
+        }
+
+        private boolean checkStudentBelongsToClass(Student student, CourseClass courseClass, String section) {
+                // Check via StudentClassMap
+                boolean inClassMap = studentClassMapRepository.existsByStudent_IdAndCourseClass_Id(
+                                student.getId(), courseClass.getId());
+                if (inClassMap) {
+                        return true;
+                }
+
+                // Fallback: Check via department + semester + section matching
+                String classDept = courseClass.getDepartment();
+                String studentDept = student.getDepartment();
+                if (studentDept == null && student.getDepartmentEntity() != null) {
+                        studentDept = student.getDepartmentEntity().getCode() != null 
+                                        ? student.getDepartmentEntity().getCode() 
+                                        : student.getDepartmentEntity().getName();
+                }
+
+                // Match by department
+                if (classDept != null && studentDept != null && classDept.equalsIgnoreCase(studentDept)) {
+                        // Also match section if specified
+                        if (section != null && !section.isEmpty()) {
+                                return section.equalsIgnoreCase(student.getSection());
+                        }
+                        return true;
+                }
+
+                return false;
+        }
+
+        public int getSessionAttendanceCount(Long sessionId) {
+                AttendanceSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Session not found"));
+                return (int) recordRepository.findBySession(session).stream()
+                                .filter(r -> r.getStatus() == AttendanceStatus.PRESENT || r.getStatus() == AttendanceStatus.MANUAL_VERIFIED)
+                                .count();
         }
 
         @Transactional

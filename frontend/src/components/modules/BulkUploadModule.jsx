@@ -46,12 +46,13 @@ const BulkUploadModule = ({ type = 'student' }) => {
 
     const handleFileChange = (event) => {
         const selectedFile = event.target.files[0];
-        if (selectedFile && selectedFile.name.endsWith('.xlsx')) {
+        const name = selectedFile?.name?.toLowerCase() || '';
+        if (selectedFile && (name.endsWith('.xlsx') || name.endsWith('.csv'))) {
             setFile(selectedFile);
             setValidationResult(null);
             setUploadComplete(false);
         } else {
-            alert('Please select a valid Excel (.xlsx) file');
+            alert('Please select a valid Excel (.xlsx) or CSV (.csv) file');
         }
     };
 
@@ -100,8 +101,46 @@ const BulkUploadModule = ({ type = 'student' }) => {
     };
 
     const handleDownloadTemplate = () => {
-        // TODO: Implement template download
-        alert('Template download feature coming soon');
+        // Build CSV with correct headers per type
+        const studentHeaders = [
+            'firstName', 'lastName', 'email', 'contactNumber', 'gender',
+            'rollNumber', 'studentId', 'departmentCode', 'program',
+            'currentSemester', 'section', 'admissionYear', 'status'
+        ];
+        const facultyHeaders = [
+            'firstName', 'lastName', 'email', 'contactNumber', 'gender',
+            'facultyId', 'departmentCode', 'designation', 'qualifications',
+            'joiningDate', 'employmentStatus'
+        ];
+
+        const studentExample = [
+            'Ravi', 'Kumar', 'ravi@college.edu', '9876543210', 'MALE',
+            '22B91A0501', '22B91A0501', 'CSE', 'B_TECH',
+            '3', 'A', '2022', 'ACTIVE'
+        ];
+        const facultyExample = [
+            'Suresh', 'Reddy', 'suresh@college.edu', '9876543211', 'MALE',
+            'FAC001', 'CSE', 'Assistant Professor', 'M.Tech',
+            '2020-06-01', 'ACTIVE'
+        ];
+
+        const headers = type === 'student' ? studentHeaders : facultyHeaders;
+        const example = type === 'student' ? studentExample : facultyExample;
+
+        const csvContent = [
+            headers.join(','),
+            example.join(','),
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${type}_upload_template.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     const handleReset = () => {
@@ -149,7 +188,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                 <input
                     id="file-upload"
                     type="file"
-                    accept=".xlsx"
+                    accept=".xlsx,.csv"
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
                 />
@@ -158,7 +197,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                     {file ? file.name : 'Click to browse or drag and drop'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                    Excel files only (.xlsx)
+                    Excel (.xlsx) or CSV (.csv) files accepted
                 </Typography>
             </Box>
 

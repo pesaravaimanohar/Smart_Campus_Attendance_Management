@@ -2,6 +2,7 @@ package com.college.smartattendance.dto;
 
 import com.college.smartattendance.entity.ProgramType;
 import com.college.smartattendance.entity.StudentStatus;
+import java.time.LocalDate;
 
 public class StudentDto {
     private Long id;
@@ -12,6 +13,7 @@ public class StudentDto {
     private String email;
     private String contactNumber;
     private String gender;
+    private LocalDate dob;
     private String departmentCode;
     private String departmentName;
     private ProgramType program;
@@ -20,128 +22,57 @@ public class StudentDto {
     private StudentStatus status;
     private Integer admissionYear;
 
-    // Constructors
-    public StudentDto() {
-    }
+    public StudentDto() {}
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getRollNumber() { return rollNumber; }
+    public void setRollNumber(String rollNumber) { this.rollNumber = rollNumber; }
 
-    public String getRollNumber() {
-        return rollNumber;
-    }
+    public String getStudentId() { return studentId; }
+    public void setStudentId(String studentId) { this.studentId = studentId; }
 
-    public void setRollNumber(String rollNumber) {
-        this.rollNumber = rollNumber;
-    }
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
 
-    public String getStudentId() {
-        return studentId;
-    }
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
 
-    public void setStudentId(String studentId) {
-        this.studentId = studentId;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public String getFirstName() {
-        return firstName;
-    }
+    public String getContactNumber() { return contactNumber; }
+    public void setContactNumber(String contactNumber) { this.contactNumber = contactNumber; }
 
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
+    // alias used by service layer
+    public String getMobile() { return contactNumber; }
+    public void setMobile(String mobile) { this.contactNumber = mobile; }
 
-    public String getLastName() {
-        return lastName;
-    }
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
 
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
+    public LocalDate getDob() { return dob; }
+    public void setDob(LocalDate dob) { this.dob = dob; }
 
-    public String getEmail() {
-        return email;
-    }
+    public String getDepartmentCode() { return departmentCode; }
+    public void setDepartmentCode(String departmentCode) { this.departmentCode = departmentCode; }
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    public String getDepartmentName() { return departmentName; }
+    public void setDepartmentName(String departmentName) { this.departmentName = departmentName; }
 
-    public String getContactNumber() {
-        return contactNumber;
-    }
+    public ProgramType getProgram() { return program; }
+    public void setProgram(ProgramType program) { this.program = program; }
 
-    public void setContactNumber(String contactNumber) {
-        this.contactNumber = contactNumber;
-    }
+    public Integer getCurrentSemester() { return currentSemester; }
+    public void setCurrentSemester(Integer currentSemester) { this.currentSemester = currentSemester; }
 
-    public String getGender() {
-        return gender;
-    }
+    public String getSection() { return section; }
+    public void setSection(String section) { this.section = section; }
 
-    public void setGender(String gender) {
-        this.gender = gender;
-    }
+    public StudentStatus getStatus() { return status; }
+    public void setStatus(StudentStatus status) { this.status = status; }
 
-    public String getDepartmentCode() {
-        return departmentCode;
-    }
-
-    public void setDepartmentCode(String departmentCode) {
-        this.departmentCode = departmentCode;
-    }
-
-    public String getDepartmentName() {
-        return departmentName;
-    }
-
-    public void setDepartmentName(String departmentName) {
-        this.departmentName = departmentName;
-    }
-
-    public ProgramType getProgram() {
-        return program;
-    }
-
-    public void setProgram(ProgramType program) {
-        this.program = program;
-    }
-
-    public Integer getCurrentSemester() {
-        return currentSemester;
-    }
-
-    public void setCurrentSemester(Integer currentSemester) {
-        this.currentSemester = currentSemester;
-    }
-
-    public String getSection() {
-        return section;
-    }
-
-    public void setSection(String section) {
-        this.section = section;
-    }
-
-    public StudentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(StudentStatus status) {
-        this.status = status;
-    }
-
-    public Integer getAdmissionYear() {
-        return admissionYear;
-    }
-
-    public void setAdmissionYear(Integer admissionYear) {
-        this.admissionYear = admissionYear;
-    }
+    public Integer getAdmissionYear() { return admissionYear; }
+    public void setAdmissionYear(Integer admissionYear) { this.admissionYear = admissionYear; }
 }

@@ -1,5 +1,6 @@
 package com.college.smartattendance.controller;
 
+import com.college.smartattendance.dto.QrAttendanceRequest;
 import com.college.smartattendance.entity.AttendanceRecord;
 import com.college.smartattendance.entity.Student;
 import com.college.smartattendance.entity.User;
@@ -12,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/student")
@@ -53,6 +55,58 @@ public class StudentController {
                 latitude,
                 longitude,
                 imagePath));
+    }
+
+    @PostMapping("/qr-attendance")
+    public ResponseEntity<?> markQrAttendance(
+            Authentication authentication,
+            @RequestBody QrAttendanceRequest request) {
+        try {
+            Student student = getAuthenticatedStudent(authentication);
+            AttendanceRecord record = attendanceService.validateAndMarkByQr(
+                    student.getId(),
+                    request.getQrToken(),
+                    request.getLatitude(),
+                    request.getLongitude()
+            );
+
+            String statusMessage;
+            switch (record.getStatus()) {
+                case PRESENT:
+                    statusMessage = "Attendance marked successfully!";
+                    break;
+                case REJECTED:
+                    statusMessage = "Attendance rejected: " + record.getRemarks();
+                    break;
+                default:
+                    statusMessage = "Attendance recorded with status: " + record.getStatus();
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "status", record.getStatus().toString(),
+                    "message", statusMessage,
+                    "timestamp", record.getTimestamp().toString(),
+                    "subjectName", record.getSession().getFacultySubjectMap().getSubject().getName()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/session-info")
+    public ResponseEntity<?> getSessionInfo(
+            @RequestParam("qrToken") String qrToken) {
+        try {
+            return ResponseEntity.ok(attendanceService.getSessionInfoByQrToken(qrToken));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        }
     }
 
     @GetMapping("/analytics")
@@ -104,3 +158,4 @@ public class StudentController {
         return ResponseEntity.ok(attendanceService.getStudentAlerts(student.getId()));
     }
 }
+
