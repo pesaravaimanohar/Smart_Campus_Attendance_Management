@@ -260,6 +260,8 @@ public class DataManagementService {
         if (s.getDepartmentEntity() != null) {
             dto.setDepartmentCode(s.getDepartmentEntity().getCode());
             dto.setDepartmentName(s.getDepartmentEntity().getName());
+        } else if (s.getDepartment() != null && !s.getDepartment().isBlank()) {
+            dto.setDepartmentCode(s.getDepartment().trim());
         }
         return dto;
     }
@@ -282,7 +284,7 @@ public class DataManagementService {
         user.setUsername(username);
         // Default password = facultyId
         user.setPassword(passwordEncoder.encode(dto.getFacultyId()));
-        user.setRole(Role.FACULTY);
+        user.setRole(resolveFacultyAccountRole(dto.getRole()));
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
         user.setEmail(dto.getEmail());
@@ -323,6 +325,9 @@ public class DataManagementService {
         user.setEmail(dto.getEmail());
         user.setContactNumber(dto.getContactNumber());
         user.setGender(dto.getGender());
+        if (dto.getRole() != null) {
+            user.setRole(resolveFacultyAccountRole(dto.getRole()));
+        }
         userRepository.save(user);
 
         faculty.setDesignation(dto.getDesignation());
@@ -366,12 +371,22 @@ public class DataManagementService {
             dto.setEmail(f.getUser().getEmail());
             dto.setContactNumber(f.getUser().getContactNumber());
             dto.setGender(f.getUser().getGender());
+            dto.setRole(f.getUser().getRole());
         }
         if (f.getDepartmentEntity() != null) {
             dto.setDepartmentCode(f.getDepartmentEntity().getCode());
             dto.setDepartmentName(f.getDepartmentEntity().getName());
+        } else if (f.getDepartment() != null && !f.getDepartment().isBlank()) {
+            dto.setDepartmentCode(f.getDepartment().trim());
         }
         return dto;
+    }
+
+    private Role resolveFacultyAccountRole(Role requested) {
+        if (requested == Role.HOD || requested == Role.PRINCIPAL || requested == Role.FACULTY) {
+            return requested;
+        }
+        return Role.FACULTY;
     }
 
     // ===================== SUBJECT =====================

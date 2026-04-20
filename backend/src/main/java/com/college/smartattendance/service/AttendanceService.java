@@ -146,10 +146,13 @@ public class AttendanceService {
 
                 // 6. Validate Location
                 double distance = calculateDistance(lat, lon, session.getLatitude(), session.getLongitude());
+                System.out.println("DEBUG: Student at [" + lat + "," + lon + "], Session at [" + session.getLatitude() + "," + session.getLongitude() + "]. Distance: " + distance + "m, Radius: " + session.getRadius() + "m");
+                
                 AttendanceStatus status = AttendanceStatus.PRESENT;
                 String remarks = "QR Verified";
 
                 if (distance > session.getRadius()) {
+                        System.out.println("DEBUG: Distance rejection triggered.");
                         status = AttendanceStatus.REJECTED;
                         remarks = "Location Mismatch: " + String.format("%.2f", distance) + "m away (max: " + session.getRadius() + "m)";
                 }

@@ -7,6 +7,7 @@ import com.college.smartattendance.service.AdminService;
 import com.college.smartattendance.service.ExcelService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,6 +25,7 @@ public class AdminController {
     private AdminService adminService;
 
     @PostMapping("/upload/students")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> uploadStudents(@RequestParam("file") MultipartFile file) {
         try {
             int count = excelService.saveStudents(file);
@@ -38,6 +40,7 @@ public class AdminController {
     }
 
     @PostMapping("/upload/faculty")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> uploadFaculty(@RequestParam("file") MultipartFile file) {
         try {
             int count = excelService.saveFaculty(file);
@@ -52,6 +55,7 @@ public class AdminController {
     }
 
     @PostMapping("/classes")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createClass(@RequestBody ClassDto classDto) {
         try {
             CourseClass courseClass = adminService.createClass(classDto);
@@ -65,16 +69,19 @@ public class AdminController {
     }
 
     @GetMapping("/classes")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<CourseClass>> getAllClasses() {
         return ResponseEntity.ok(adminService.getAllClasses());
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<StatsDto> getStats() {
         return ResponseEntity.ok(adminService.getStats());
     }
 
     @DeleteMapping("/classes/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteClass(@PathVariable Long id) {
         try {
             adminService.deleteClass(id);
@@ -86,6 +93,7 @@ public class AdminController {
     }
 
     @PostMapping("/users/reset-first-login")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> resetFirstLogin() {
         try {
             adminService.resetAllUsersToFirstLogin();

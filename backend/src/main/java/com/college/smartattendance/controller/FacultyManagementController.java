@@ -18,7 +18,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/faculty")
-@CrossOrigin(origins = "*")
 public class FacultyManagementController {
 
     @Autowired

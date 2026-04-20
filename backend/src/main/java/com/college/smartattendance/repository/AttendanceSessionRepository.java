@@ -9,5 +9,8 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
     List<AttendanceSession> findByIsActiveTrue();
     Optional<AttendanceSession> findByQrToken(String qrToken);
     List<AttendanceSession> findByFacultySubjectMap_Id(Long facultySubjectMapId);
+    List<AttendanceSession> findByFacultySubjectMap_Faculty_Department(String department);
+    long countByIsActiveTrue();
+    long countByIsActiveTrueAndFacultySubjectMap_Faculty_Department(String department);
 }
 

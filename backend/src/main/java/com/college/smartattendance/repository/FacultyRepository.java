@@ -16,6 +16,7 @@ public interface FacultyRepository extends JpaRepository<Faculty, Long> {
     // department (legacy String field)
     List<Faculty> findByDepartment(String department);
     List<Faculty> findByEmploymentStatus(EmploymentStatus status);
+    long countByDepartment(String department);
 
     // via user_id FK
     Optional<Faculty> findByUser_Id(Long userId);

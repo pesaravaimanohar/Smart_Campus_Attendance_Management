@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     Typography, Box, Grid, Card, CardContent, Button, Avatar, Tooltip,
     useTheme, Fade, Chip, LinearProgress, Stack, Divider, Paper,
     Table, TableHead, TableBody, TableRow, TableCell, TableContainer
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+    ResponsiveContainer, BarChart, Bar, Cell
+} from 'recharts';
+import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import {
     Timeline as TimelineIcon,
@@ -23,42 +28,41 @@ import {
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import StatsCard from '../components/StatsCard';
+import { getPrincipalDashboard } from "../services/api";
 
 const PrincipalDashboard = () => {
     const { user } = useAuth();
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const [activeSection, setActiveSection] = useState('overview');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-    // College-wide data
-    const dailyData = [
-        { day: 'Mon', value: 78, students: 1240 },
-        { day: 'Tue', value: 85, students: 1350 },
-        { day: 'Wed', value: 82, students: 1310 },
-        { day: 'Thu', value: 88, students: 1400 },
-        { day: 'Fri', value: 75, students: 1200 },
-        { day: 'Sat', value: 60, students: 960 },
-    ];
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await getPrincipalDashboard();
+            setData(res);
+        } catch (e) {
+            setError(e.response?.data?.message || "Failed to load dashboard data");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-    const departments = [
-        { name: 'Computer Science', code: 'CSE', students: 320, faculty: 14, avg: 85, trend: '+3%', color: theme.palette.success.main },
-        { name: 'Electronics & Comm.', code: 'ECE', students: 280, faculty: 12, avg: 72, trend: '-1%', color: theme.palette.warning.main },
-        { name: 'Mechanical', code: 'MECH', students: 250, faculty: 11, avg: 65, trend: '-4%', color: theme.palette.error.main },
-        { name: 'Civil', code: 'CIVIL', students: 200, faculty: 9, avg: 78, trend: '+1%', color: theme.palette.info.main },
-        { name: 'Electrical', code: 'EEE', students: 180, faculty: 8, avg: 80, trend: '+2%', color: theme.palette.primary.main },
-    ];
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
-    const recentAlerts = [
-        { dept: 'MECH', msg: '3 faculty below 60% avg attendance in their classes', severity: 'error', time: '2h ago' },
-        { dept: 'ECE', msg: '15 students in critical defaulter zone', severity: 'warning', time: '4h ago' },
-        { dept: 'CSE', msg: 'All targets met — 85% average achieved', severity: 'success', time: '1d ago' },
-    ];
+    if (loading) return <Box p={4}><LinearProgress /></Box>;
+    if (error) return <Box p={4}><Typography color="error">{error}</Typography></Box>;
+    if (!data) return null;
 
-    const topPerformers = [
-        { name: 'Dr. Ramesh K', dept: 'CSE', avg: 92 },
-        { name: 'Prof. Sunitha M', dept: 'ECE', avg: 89 },
-        { name: 'Dr. Venkat R', dept: 'EEE', avg: 87 },
-    ];
+    const { 
+        collegeAttendance, activeSessions, facultyPresent, totalFaculty, 
+        criticalAlerts, weeklyTrends, departments, topPerformers, recentAlerts = [] 
+    } = data;
 
     const menuItems = [
         { id: 'overview', icon: <DashboardIcon />, label: 'Overview' },
@@ -70,10 +74,29 @@ const PrincipalDashboard = () => {
 
     const currentLabel = menuItems.find(m => m.id === activeSection)?.label || 'Overview';
 
+    // Custom Tooltip for AreaChart
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <Paper sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', boxShadow: theme.shadows[8], bgcolor: alpha(theme.palette.background.paper, 0.9) }}>
+                    <Typography variant="subtitle2" fontWeight={800}>{label}</Typography>
+                    <Divider sx={{ my: 0.5 }} />
+                    <Typography variant="body2" color="secondary.main" fontWeight={700}>
+                        Attendance: {payload[0].value}%
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        Overall college performance
+                    </Typography>
+                </Paper>
+            );
+        }
+        return null;
+    };
+
     return (
         <DashboardLayout
             title={currentLabel}
-            subtitle="Executive Dashboard"
+            subtitle={`Executive Dashboard • ${user?.collegeName || 'JNTUA College of Engineering'}`}
             portalIcon={<ApartmentIcon />}
             portalTitle="PRINCIPAL"
             portalSubtitle="Executive View"
@@ -89,7 +112,7 @@ const PrincipalDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="College Attendance"
-                                    value="78%"
+                                    value={collegeAttendance + "%"}
                                     icon={<TimelineIcon />}
                                     color={theme.palette.primary.main}
                                     trend="+2.5% vs last week"
@@ -99,7 +122,7 @@ const PrincipalDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Active Sessions"
-                                    value="15"
+                                    value={activeSessions}
                                     icon={<CalendarIcon />}
                                     color={theme.palette.info.main}
                                     subtitle="running right now"
@@ -109,18 +132,18 @@ const PrincipalDashboard = () => {
                             </Grid>
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
-                                    title="Faculty Present"
-                                    value="45/50"
+                                    title="Faculty Presence"
+                                    value={`${facultyPresent}/${totalFaculty}`}
                                     icon={<SchoolIcon />}
                                     color={theme.palette.success.main}
-                                    trend="90% attendance"
+                                    trend={`${Math.round((facultyPresent/totalFaculty)*100)}% active`}
                                     animationDelay={2}
                                 />
                             </Grid>
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Critical Alerts"
-                                    value="2"
+                                    value={criticalAlerts}
                                     icon={<WarningIcon />}
                                     color={theme.palette.error.main}
                                     subtitle="require attention"
@@ -132,7 +155,7 @@ const PrincipalDashboard = () => {
                         <Grid container spacing={3}>
                             {/* College Attendance Trends */}
                             <Grid item xs={12} md={8}>
-                                <Card sx={{ borderRadius: 3, p: 3, height: '100%', border: '1px solid', borderColor: 'divider' }}>
+                                <Card sx={{ borderRadius: 3, p: 3, height: '100%', border: '1px solid', borderColor: 'divider', position: 'relative', overflow: 'hidden' }}>
                                     <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
                                         <Box display="flex" alignItems="center" gap={1.5}>
                                             <Avatar sx={{
@@ -140,60 +163,51 @@ const PrincipalDashboard = () => {
                                                 color: 'secondary.main',
                                                 width: 36, height: 36,
                                             }}>
-                                                <TimelineIcon fontSize="small" />
+                                                <TrendingUpIcon fontSize="small" />
                                             </Avatar>
                                             <Box>
-                                                <Typography variant="h6" fontWeight={700} color="text.primary">College Attendance Trends</Typography>
-                                                <Typography variant="caption" color="text.secondary">This week's daily overview</Typography>
+                                                <Typography variant="h6" fontWeight={800} color="text.primary">College Attendance Analytics</Typography>
+                                                <Typography variant="caption" color="text.secondary">7-day performance trajectory</Typography>
                                             </Box>
                                         </Box>
-                                        <Button size="small" variant="outlined" sx={{ borderRadius: 2, fontWeight: 600 }}>Full Report</Button>
+                                        <Button size="small" variant="contained" color="secondary" sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>Download Report</Button>
                                     </Box>
 
-                                    <Box sx={{
-                                        display: 'flex',
-                                        alignItems: 'flex-end',
-                                        justifyContent: 'space-around',
-                                        height: 280,
-                                        px: 2,
-                                        pt: 2,
-                                        pb: 1,
-                                        bgcolor: alpha(theme.palette.background.default, isDark ? 0.3 : 0.5),
-                                        borderRadius: 2,
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                    }}>
-                                        {dailyData.map((item, i) => (
-                                            <Box key={i} display="flex" flexDirection="column" alignItems="center" width="14%">
-                                                <Typography variant="caption" fontWeight={700} color="text.secondary" mb={0.5}>
-                                                    {item.value}%
-                                                </Typography>
-                                                <Tooltip title={`${item.value}% — ${item.students} students`}>
-                                                    <Box
-                                                        sx={{
-                                                            width: '65%',
-                                                            height: `${(item.value / 100) * 220}px`,
-                                                            background: `linear-gradient(180deg, ${alpha(theme.palette.secondary.light, 0.7)}, ${theme.palette.secondary.main})`,
-                                                            borderRadius: '8px 8px 0 0',
-                                                            cursor: 'pointer',
-                                                            animation: `growUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.08}s both`,
-                                                            '@keyframes growUp': {
-                                                                from: { height: 0, opacity: 0 },
-                                                                to: { height: `${(item.value / 100) * 220}px`, opacity: 1 },
-                                                            },
-                                                            transition: 'all 0.3s ease',
-                                                            '&:hover': {
-                                                                transform: 'scaleY(1.05)',
-                                                                boxShadow: `0 4px 16px ${alpha(theme.palette.secondary.main, 0.4)}`,
-                                                            },
-                                                        }}
-                                                    />
-                                                </Tooltip>
-                                                <Typography variant="caption" sx={{ mt: 1, fontWeight: 700, color: 'text.secondary' }}>
-                                                    {item.day}
-                                                </Typography>
-                                            </Box>
-                                        ))}
+                                    <Box sx={{ height: 300, mt: 2 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={weeklyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                <defs>
+                                                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor={theme.palette.secondary.main} stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor={theme.palette.secondary.main} stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+                                                <XAxis 
+                                                    dataKey="day" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fontSize: 12, fontWeight: 600, fill: theme.palette.text.secondary }}
+                                                    dy={10}
+                                                />
+                                                <YAxis 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fontSize: 12, fontWeight: 600, fill: theme.palette.text.secondary }}
+                                                    domain={[0, 100]}
+                                                />
+                                                <RechartsTooltip content={<CustomTooltip />} />
+                                                <Area 
+                                                    type="monotone" 
+                                                    dataKey="value" 
+                                                    stroke={theme.palette.secondary.main} 
+                                                    strokeWidth={4}
+                                                    fillOpacity={1} 
+                                                    fill="url(#colorValue)" 
+                                                    animationDuration={2000}
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
                                     </Box>
                                 </Card>
                             </Grid>
@@ -210,40 +224,26 @@ const PrincipalDashboard = () => {
                                             <BusinessIcon fontSize="small" />
                                         </Avatar>
                                         <Box>
-                                            <Typography variant="h6" fontWeight={700} color="text.primary">Dept. Performance</Typography>
-                                            <Typography variant="caption" color="text.secondary">{departments.length} departments</Typography>
+                                            <Typography variant="h6" fontWeight={800} color="text.primary">Dept. Performance</Typography>
+                                            <Typography variant="caption" color="text.secondary">Cross-departmental audit</Typography>
                                         </Box>
                                     </Box>
 
-                                    <Stack spacing={2.5}>
+                                    <Stack spacing={3}>
                                         {departments.map((dept, i) => {
-                                            const perfColor = dept.avg >= 80 ? 'success' : dept.avg >= 70 ? 'warning' : 'error';
+                                            const perfColor = dept.avg >= 85 ? 'success' : dept.avg >= 70 ? 'warning' : 'error';
                                             return (
-                                                <Box key={i} sx={{
-                                                    animation: `fadeIn 0.3s ease-out ${i * 0.06}s both`,
-                                                    '@keyframes fadeIn': {
-                                                        from: { opacity: 0 },
-                                                        to: { opacity: 1 },
-                                                    },
-                                                }}>
-                                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-                                                        <Box display="flex" alignItems="center" gap={1}>
-                                                            <Typography variant="body2" fontWeight={700} color="text.primary">{dept.code}</Typography>
-                                                            <Typography variant="caption" color="text.secondary">{dept.name}</Typography>
+                                                <Box key={i} component={motion.div} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+                                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                                                        <Box>
+                                                            <Typography variant="body2" fontWeight={800} color="text.primary">{dept.code}</Typography>
+                                                            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: 120 }}>{dept.name}</Typography>
                                                         </Box>
-                                                        <Box display="flex" alignItems="center" gap={0.5}>
-                                                            <Typography variant="body2" fontWeight={700} color={`${perfColor}.main`}>
-                                                                {dept.avg}%
+                                                        <Box textAlign="right">
+                                                            <Typography variant="body2" fontWeight={900} color={`${perfColor}.main`}>{dept.avg}%</Typography>
+                                                            <Typography variant="caption" color={dept.trend.startsWith('+') ? 'success.main' : 'error.main'} sx={{ fontWeight: 700 }}>
+                                                                {dept.trend}
                                                             </Typography>
-                                                            <Chip
-                                                                label={dept.trend}
-                                                                size="small"
-                                                                sx={{
-                                                                    height: 18, fontSize: '0.6rem', fontWeight: 700,
-                                                                    bgcolor: alpha(dept.color, isDark ? 0.12 : 0.06),
-                                                                    color: dept.trend.startsWith('+') ? 'success.main' : 'error.main',
-                                                                }}
-                                                            />
                                                         </Box>
                                                     </Box>
                                                     <LinearProgress
@@ -251,15 +251,17 @@ const PrincipalDashboard = () => {
                                                         value={dept.avg}
                                                         color={perfColor}
                                                         sx={{
-                                                            height: 6,
-                                                            borderRadius: 3,
-                                                            bgcolor: alpha(dept.color, isDark ? 0.1 : 0.06),
+                                                            height: 8,
+                                                            borderRadius: 4,
+                                                            bgcolor: alpha(theme.palette.text.disabled, 0.1),
                                                         }}
                                                     />
                                                 </Box>
                                             );
                                         })}
                                     </Stack>
+
+                                    <Button fullWidth variant="outlined" sx={{ mt: 4, borderRadius: 2, fontWeight: 700, borderColor: 'divider' }}>View All Departments</Button>
                                 </Card>
                             </Grid>
 
@@ -269,50 +271,42 @@ const PrincipalDashboard = () => {
                                     <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                                         <Box display="flex" alignItems="center" gap={1.5}>
                                             <Avatar sx={{
-                                                bgcolor: alpha(theme.palette.warning.main, isDark ? 0.15 : 0.08),
-                                                color: 'warning.main',
+                                                bgcolor: alpha(theme.palette.error.main, isDark ? 0.15 : 0.08),
+                                                color: 'error.main',
                                                 width: 36, height: 36,
                                             }}>
                                                 <WarningIcon fontSize="small" />
                                             </Avatar>
-                                            <Typography variant="subtitle1" fontWeight={700} color="text.primary">Recent Alerts</Typography>
+                                            <Typography variant="subtitle1" fontWeight={800} color="text.primary">Critical System Alerts</Typography>
                                         </Box>
                                     </Box>
                                     <Stack divider={<Divider />}>
-                                        {recentAlerts.map((alert, i) => (
+                                        {recentAlerts.length > 0 ? recentAlerts.map((alert, i) => (
                                             <Box
                                                 key={i}
                                                 sx={{
-                                                    p: 2,
-                                                    display: 'flex',
-                                                    gap: 1.5,
-                                                    alignItems: 'flex-start',
-                                                    transition: 'background-color 0.2s ease',
-                                                    '&:hover': {
-                                                        bgcolor: alpha(theme.palette.text.primary, 0.02),
-                                                    },
+                                                    p: 2, display: 'flex', gap: 2, alignItems: 'flex-start',
+                                                    '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.03) },
                                                 }}
                                             >
                                                 <Box sx={{
-                                                    width: 8, height: 8,
-                                                    borderRadius: '50%',
-                                                    mt: 0.8,
-                                                    flexShrink: 0,
-                                                    bgcolor: alert.severity === 'error'
-                                                        ? 'error.main'
-                                                        : alert.severity === 'warning'
-                                                            ? 'warning.main'
-                                                            : 'success.main',
+                                                    width: 10, height: 10, borderRadius: '50%', mt: 0.8,
+                                                    bgcolor: alert.severity === 'error' ? 'error.main' : 'warning.main',
+                                                    boxShadow: `0 0 10px ${alert.severity === 'error' ? theme.palette.error.main : theme.palette.warning.main}`
                                                 }} />
                                                 <Box flex={1}>
                                                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-                                                        <Chip label={alert.dept} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }} />
+                                                        <Chip label={alert.dept} size="small" sx={{ fontWeight: 700, height: 20, fontSize: '0.65rem' }} color="error" variant="outlined" />
                                                         <Typography variant="caption" color="text.disabled">{alert.time}</Typography>
                                                     </Box>
-                                                    <Typography variant="body2" color="text.secondary">{alert.msg}</Typography>
+                                                    <Typography variant="body2" color="text.primary" fontWeight={500}>{alert.msg}</Typography>
                                                 </Box>
                                             </Box>
-                                        ))}
+                                        )) : (
+                                            <Box p={4} textAlign="center">
+                                                <Typography variant="body2" color="text.disabled">No critical alerts at this time.</Typography>
+                                            </Box>
+                                        )}
                                     </Stack>
                                 </Card>
                             </Grid>
@@ -330,8 +324,8 @@ const PrincipalDashboard = () => {
                                                 <TrophyIcon fontSize="small" />
                                             </Avatar>
                                             <Box>
-                                                <Typography variant="subtitle1" fontWeight={700} color="text.primary">Top Faculty Performers</Typography>
-                                                <Typography variant="caption" color="text.secondary">Highest avg attendance in classes</Typography>
+                                                <Typography variant="subtitle1" fontWeight={800} color="text.primary">Top Faculty Performers</Typography>
+                                                <Typography variant="caption" color="text.secondary">Excellence in student engagement</Typography>
                                             </Box>
                                         </Box>
                                     </Box>
@@ -341,29 +335,25 @@ const PrincipalDashboard = () => {
                                                 key={i}
                                                 sx={{
                                                     p: 2, display: 'flex', alignItems: 'center', gap: 2,
-                                                    transition: 'background-color 0.2s ease',
-                                                    '&:hover': { bgcolor: alpha(theme.palette.text.primary, 0.02) },
+                                                    '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.03) },
                                                 }}
                                             >
                                                 <Avatar sx={{
-                                                    width: 40, height: 40, fontWeight: 800,
-                                                    bgcolor: i === 0
-                                                        ? alpha('#FFD700', isDark ? 0.15 : 0.1)
-                                                        : i === 1
-                                                            ? alpha('#C0C0C0', isDark ? 0.15 : 0.1)
-                                                            : alpha('#CD7F32', isDark ? 0.15 : 0.1),
-                                                    color: i === 0 ? '#FFD700' : i === 1 ? '#9CA3AF' : '#CD7F32',
-                                                    fontSize: '1.1rem',
+                                                    width: 40, height: 40, fontWeight: 900,
+                                                    bgcolor: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32',
+                                                    color: '#fff',
+                                                    fontSize: '1.2rem',
+                                                    boxShadow: theme.shadows[2]
                                                 }}>
                                                     {i + 1}
                                                 </Avatar>
                                                 <Box flex={1}>
-                                                    <Typography variant="body2" fontWeight={700} color="text.primary">{fac.name}</Typography>
+                                                    <Typography variant="body2" fontWeight={800} color="text.primary">{fac.name}</Typography>
                                                     <Typography variant="caption" color="text.secondary">{fac.dept} Department</Typography>
                                                 </Box>
                                                 <Box textAlign="right">
-                                                    <Typography variant="h6" fontWeight={800} color="success.main">{fac.avg}%</Typography>
-                                                    <Typography variant="caption" color="text.secondary">avg attendance</Typography>
+                                                    <Typography variant="h6" fontWeight={900} color="success.main">{fac.avg}%</Typography>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Avg. Attendance</Typography>
                                                 </Box>
                                             </Box>
                                         ))}
@@ -378,17 +368,11 @@ const PrincipalDashboard = () => {
             {activeSection !== 'overview' && (
                 <Fade in timeout={400}>
                     <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh" flexDirection="column">
-                        <Box sx={{
-                            width: 120, height: 120,
-                            bgcolor: alpha(theme.palette.text.primary, 0.04),
-                            borderRadius: '50%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            mb: 3,
-                        }}>
-                            <DashboardIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
-                        </Box>
-                        <Typography variant="h5" color="text.secondary" fontWeight={700}>{currentLabel}</Typography>
-                        <Typography color="text.disabled" sx={{ mt: 1 }}>This section is under development.</Typography>
+                         <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 4 }}>
+                            <DashboardIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
+                         </motion.div>
+                        <Typography variant="h5" color="text.secondary" fontWeight={800}>{currentLabel}</Typography>
+                        <Typography color="text.disabled" sx={{ mt: 1 }}>Deep analytics for this module are being compiled.</Typography>
                     </Box>
                 </Fade>
             )}

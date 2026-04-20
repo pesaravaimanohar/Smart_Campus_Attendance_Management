@@ -13,7 +13,6 @@ import java.nio.file.Path;
 
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "*")
 public class FileController {
 
     @Autowired

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { adminDataAPI } from '../services/api';
+import { adminDataAPI, triggerFullSeed } from '../services/api';
 
 async function apiCall(method, path, body) {
   return adminDataAPI.request(method, path, body);
@@ -757,6 +757,77 @@ function DepartmentsTab({ departments, onRefresh, toast }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  SYSTEM TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function SystemTab({ toast }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleFullSeed = async () => {
+    if (!window.confirm("WARNING: This will generate a massive amount of randomized data (Students, Faculty, and Attendance Sessions). Use this for testing analysis and charts. Proceed?")) return;
+    
+    setLoading(true);
+    try {
+      const res = await triggerFullSeed();
+      toast(res.message, 'success');
+    } catch (e) {
+      toast(e.message || "Seeding failed", 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="dm-tab-content">
+      <div className="dm-toolbar">
+         <h3 style={{ margin: 0, color: '#e2e8f0' }}>System Maintenance</h3>
+      </div>
+      
+      <div style={{ 
+        background: '#1a2035', 
+        padding: '2rem', 
+        borderRadius: '12px', 
+        border: '1px solid #2d3748',
+        maxWidth: '700px',
+        margin: '2rem auto'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div style={{ fontSize: '3rem' }}>🚀</div>
+          <div>
+            <h4 style={{ margin: 0, color: '#fff', fontSize: '1.2rem' }}>Complete Data Seeder</h4>
+            <p style={{ margin: '0.5rem 0 0', color: '#64748b', fontSize: '0.9rem' }}>
+              Populate the entire college system with realistic data. This includes students (60 per class), 
+              faculty assignments, and 30 days of randomized attendance history for live analysis.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ 
+          background: 'rgba(99,102,241,0.1)', 
+          padding: '1rem', 
+          borderRadius: '8px', 
+          borderLeft: '4px solid #6366f1',
+          marginBottom: '2rem'
+        }}>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#a5b4fc', lineHeight: 1.5 }}>
+            <strong>Note:</strong> This process might take 10-20 seconds as thousands of records are created. 
+            Existing records will be updated or skipped to prevent duplicates.
+          </p>
+        </div>
+
+        <button 
+          className="dm-btn dm-btn-primary" 
+          onClick={handleFullSeed}
+          disabled={loading}
+          style={{ padding: '1rem 2rem', fontSize: '1rem', width: '100%', justifyContent: 'center' }}
+        >
+          {loading ? '🚀 Seeding Database...' : 'Run Full System Seed'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function DataManagement() {
@@ -786,6 +857,7 @@ export default function DataManagement() {
     { key: 'faculty',     label: '👨‍🏫 Faculty',    icon: '👨‍🏫' },
     { key: 'subjects',    label: '📚 Subjects',    icon: '📚' },
     { key: 'assignments', label: '🔗 Assignments', icon: '🔗' },
+    { key: 'system',      label: '🚀 System',      icon: '🚀' },
   ];
 
   return (
@@ -828,6 +900,7 @@ export default function DataManagement() {
         {activeTab === 'faculty'     && <FacultyTab departments={departments} toast={pushToast} />}
         {activeTab === 'subjects'    && <SubjectsTab toast={pushToast} />}
         {activeTab === 'assignments' && <AssignmentsTab toast={pushToast} />}
+        {activeTab === 'system'      && <SystemTab toast={pushToast} />}
       </div>
 
       <style>{`

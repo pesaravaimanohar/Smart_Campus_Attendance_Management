@@ -1,6 +1,7 @@
 package com.college.smartattendance.controller;
 
 import com.college.smartattendance.entity.User;
+import com.college.smartattendance.repository.FacultyRepository;
 import com.college.smartattendance.repository.UserRepository;
 import com.college.smartattendance.service.FileStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,11 +16,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/me")
-@CrossOrigin(origins = "*")
 public class UserProfileController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private FacultyRepository facultyRepository;
 
     @Autowired
     private FileStorageService fileStorageService;
@@ -44,6 +47,17 @@ public class UserProfileController {
             response.put("contactNumber", user.getContactNumber());
             response.put("gender", user.getGender());
             response.put("dob", user.getDob());
+
+            facultyRepository.findByUser(user).ifPresent(faculty -> {
+                response.put("facultyId", faculty.getFacultyId());
+                response.put("designation", faculty.getDesignation());
+                if (faculty.getDepartmentEntity() != null) {
+                    response.put("departmentCode", faculty.getDepartmentEntity().getCode());
+                    response.put("departmentName", faculty.getDepartmentEntity().getName());
+                } else if (faculty.getDepartment() != null) {
+                    response.put("departmentCode", faculty.getDepartment());
+                }
+            });
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {

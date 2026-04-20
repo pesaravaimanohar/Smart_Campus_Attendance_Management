@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-    Typography, Button, Paper, Box, Card, CardContent,
+    Typography, Button, Box, Card, CardContent,
     Avatar, CircularProgress, Fade, Chip, IconButton,
-    Alert, AlertTitle, Divider, useTheme
+    Alert, AlertTitle, Divider, useTheme, Stack, TextField, Grid
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -16,49 +16,73 @@ import {
     AccessTime as TimeIcon,
     Warning as WarningIcon,
     CameraAlt as CameraIcon,
-    Refresh as RefreshIcon
+    Refresh as RefreshIcon,
+    ErrorOutline as ErrorIcon,
+    CheckCircleOutline as ApproveIcon,
+    Check as CheckIcon,
+    Close as CloseIcon,
+    Timer as TimerIcon
 } from "@mui/icons-material";
 import { Html5Qrcode } from "html5-qrcode";
 import { markQrAttendance, getSessionInfoByQr } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import GlobalHeader from "../components/GlobalHeader";
 
 const ScanAttendance = ({ onBack }) => {
     const { user } = useAuth();
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
+
+    // UI state
     const [scanning, setScanning] = useState(false);
     const [scannedToken, setScannedToken] = useState(null);
     const [sessionInfo, setSessionInfo] = useState(null);
-    const [result, setResult] = useState(null);
-    const [error, setError] = useState(null);
+    const [userLocation, setUserLocation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [locationLoading, setLocationLoading] = useState(false);
-    const [userLocation, setUserLocation] = useState(null);
+    const [error, setError] = useState(null);
+    const [result, setResult] = useState(null);
+    const [manualToken, setManualToken] = useState("");
+
+    // Refs
     const html5QrCodeRef = useRef(null);
-    const scannerContainerRef = useRef(null);
 
     // Get user location
     const getUserLocation = () => {
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
-                reject(new Error("Geolocation is not supported by your browser"));
+                const err = "Geolocation is not supported by your browser";
+                setError(err);
+                reject(new Error(err));
                 return;
             }
+
+            console.log("Fetching user location...");
             setLocationLoading(true);
+            
             navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const loc = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude
-                    };
+                (pos) => {
+                    const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+                    console.log("Location fetched:", loc);
                     setUserLocation(loc);
                     setLocationLoading(false);
                     resolve(loc);
                 },
                 (err) => {
+                    console.error("Location error:", err);
                     setLocationLoading(false);
-                    reject(new Error("Location access denied. Please enable location services."));
+                    let msg = "Location access denied. Please enable location services.";
+                    if (err.code === 3) msg = "Location request timed out. Using default (0,0) for testing.";
+                    
+                    // ON LOCALHOST: Allow fallback if location fails
+                    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+                        console.log("On localhost, bypassing location error for testing.");
+                        const fallbackLoc = { latitude: 0, longitude: 0 };
+                        setUserLocation(fallbackLoc);
+                        resolve(fallbackLoc);
+                    } else {
+                        setError(msg);
+                        reject(new Error(msg));
+                    }
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
@@ -67,6 +91,7 @@ const ScanAttendance = ({ onBack }) => {
 
     // Start QR Scanner
     const startScanner = async () => {
+        console.log("Starting scanner sequence...");
         setError(null);
         setResult(null);
         setScannedToken(null);
@@ -74,541 +99,421 @@ const ScanAttendance = ({ onBack }) => {
         setScanning(true);
 
         try {
-            // Get location first
+            // Get location first (can take time)
             await getUserLocation();
         } catch (e) {
-            setError(e.message);
+            console.error("Scanner sequence halted at location step:", e);
             setScanning(false);
             return;
         }
 
-        // Wait for DOM to render the scanner container
-        setTimeout(() => {
+        // Delay to ensure DOM is ready for Html5Qrcode
+        setTimeout(async () => {
             try {
+                if (!document.getElementById("qr-reader")) {
+                    console.error("qr-reader element not found in DOM");
+                    setScanning(false);
+                    return;
+                }
+                
                 const html5QrCode = new Html5Qrcode("qr-reader");
                 html5QrCodeRef.current = html5QrCode;
 
-                html5QrCode.start(
+                const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+                
+                await html5QrCode.start(
                     { facingMode: "environment" },
-                    {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                    },
-                    async (decodedText) => {
-                        // QR scanned successfully
-                        await html5QrCode.stop();
-                        html5QrCodeRef.current = null;
-                        setScanning(false);
-                        handleQrScanned(decodedText);
-                    },
-                    (errorMessage) => {
-                        // parse error - ignore
-                    }
-                ).catch((err) => {
-                    setError("Failed to start camera. Please ensure camera permissions are granted.");
-                    setScanning(false);
-                });
-            } catch (e) {
-                setError("Failed to initialize scanner: " + e.message);
+                    config,
+                    onScanSuccess,
+                    onScanFailure
+                );
+                console.log("Scanner running...");
+            } catch (err) {
+                console.error("Scanner start error:", err);
+                setError("Camera access failed. Ensure you have granted permissions and are using localhost.");
                 setScanning(false);
             }
         }, 500);
+    };
+
+    // Success Callback
+    const onScanSuccess = async (decodedText) => {
+        console.log("QR scanned! Value:", decodedText);
+        await stopScanner();
+        setScannedToken(decodedText);
+        handleFetchSessionInfo(decodedText);
+    };
+
+    const handleFetchSessionInfo = async (token) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const info = await getSessionInfoByQr(token);
+            setSessionInfo(info);
+            console.log("Session info loaded:", info);
+        } catch (e) {
+            console.error("Session info fetch error:", e);
+            setError(e.response?.data?.message || e.message || "Invalid QR Code or Session no longer active.");
+            setScannedToken(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onScanFailure = (error) => {
+        // Just ignore failures unless it's a serious error
+    };
+
+    // Mark attendance
+    const handleMarkAttendance = async () => {
+        if (!scannedToken || !userLocation) {
+            setError("Cannot mark attendance: missing token or location data.");
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            console.log("Marking attendance...");
+            const response = await markQrAttendance({
+                qrToken: scannedToken,
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude
+            });
+            console.log("Marking response:", response);
+            setResult(response);
+        } catch (e) {
+            console.error("Attendance mark error:", e);
+            setError(e.response?.data?.message || e.message || "Verification failed. Check your range.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Stop QR Scanner
     const stopScanner = async () => {
         if (html5QrCodeRef.current) {
             try {
-                await html5QrCodeRef.current.stop();
+                if (html5QrCodeRef.current.isScanning) {
+                    await html5QrCodeRef.current.stop();
+                }
+                await html5QrCodeRef.current.clear();
             } catch (e) {
-                // ignore
+                console.warn("Scanner stop warning:", e);
             }
             html5QrCodeRef.current = null;
         }
         setScanning(false);
     };
 
-    // Handle scanned QR code
-    const handleQrScanned = async (qrText) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            // The QR code contains the qrToken directly
-            const qrToken = qrText.trim();
-            setScannedToken(qrToken);
-
-            // Fetch session info
-            const info = await getSessionInfoByQr(qrToken);
-            setSessionInfo(info);
-        } catch (e) {
-            const msg = e.response?.data?.message || e.message || "Invalid QR code";
-            setError(msg);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Mark attendance
-    const handleMarkAttendance = async () => {
-        if (!scannedToken || !userLocation) return;
-
-        setLoading(true);
-        setError(null);
-
-        try {
-            const response = await markQrAttendance({
-                qrToken: scannedToken,
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude
-            });
-
-            setResult(response);
-        } catch (e) {
-            const msg = e.response?.data?.message || e.message || "Failed to mark attendance";
-            setError(msg);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     // Cleanup scanner on unmount
     useEffect(() => {
         return () => {
-            if (html5QrCodeRef.current) {
+            if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
                 html5QrCodeRef.current.stop().catch(() => { });
             }
         };
     }, []);
 
     // Reset to scan again
-    const resetScan = () => {
+    const onCancel = () => {
+        stopScanner();
+        setError(null);
         setScannedToken(null);
         setSessionInfo(null);
-        setResult(null);
-        setError(null);
+        setManualToken("");
+    };
+
+    const handleManualSubmit = () => {
+        if (!manualToken.trim()) return;
+        const cleanToken = manualToken.trim();
+        setScannedToken(cleanToken);
+        handleFetchSessionInfo(cleanToken);
     };
 
     return (
-        <Box sx={{
-            minHeight: '100vh',
-            bgcolor: 'background.default',
-            display: 'flex',
-            flexDirection: 'column'
-        }}>
-            {/* Header */}
-            <Box sx={{
-                p: 2,
-                px: 3,
-                bgcolor: 'background.paper',
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-            }}>
-                <IconButton onClick={onBack} color="primary" size="large">
-                    <BackIcon />
-                </IconButton>
-                <ScanIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+        <Box sx={{ maxWidth: 600, mx: "auto", py: 2 }}>
+            <Fade in timeout={500}>
                 <Box>
-                    <Typography variant="h6" fontWeight="800">Scan QR Code</Typography>
-                    <Typography variant="caption" color="text.secondary">Mark your attendance by scanning the class QR</Typography>
-                </Box>
-            </Box>
-
-            <Box sx={{ flexGrow: 1, p: { xs: 2, md: 4 }, maxWidth: 600, mx: 'auto', width: '100%' }}>
-                {/* INITIAL STATE - Show scan button */}
-                {!scanning && !scannedToken && !result && (
-                    <Fade in timeout={400}>
+                    {/* Header Details */}
+                    <Box display="flex" alignItems="center" mb={3} gap={1}>
+                        <IconButton onClick={onBack} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
+                            <BackIcon />
+                        </IconButton>
                         <Box>
-                            <Card sx={{
-                                borderRadius: 4,
-                                overflow: 'hidden',
-                                boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
-                                border: '1px solid',
-                                borderColor: 'divider'
+                            <Typography variant="h5" fontWeight={800}>Scan Attendance</Typography>
+                            <Typography variant="caption" color="text.secondary">Place the QR code inside the frame</Typography>
+                        </Box>
+                    </Box>
+
+                    {/* LANDING STATE (Ready to scan) */}
+                    {!scanning && !scannedToken && !result && (
+                        <Card sx={{ borderRadius: 4, overflow: 'hidden', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                            <Box sx={{
+                                p: 4, textAlign: 'center',
+                                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)}, ${alpha(theme.palette.secondary.main, 0.05)})`
                             }}>
                                 <Box sx={{
-                                    p: 6,
-                                    textAlign: 'center',
-                                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                                    color: 'white'
+                                    width: 120, height: 120, borderRadius: '50%', bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 3,
+                                    position: 'relative'
                                 }}>
-                                    <Avatar sx={{
-                                        bgcolor: 'rgba(255,255,255,0.2)',
-                                        width: 80,
-                                        height: 80,
-                                        mx: 'auto',
-                                        mb: 3,
-                                        backdropFilter: 'blur(10px)'
-                                    }}>
-                                        <CameraIcon sx={{ fontSize: 40 }} />
-                                    </Avatar>
-                                    <Typography variant="h4" fontWeight="800" gutterBottom>
-                                        Ready to Scan
-                                    </Typography>
-                                    <Typography variant="body1" sx={{ opacity: 0.9, mb: 4 }}>
-                                        Point your camera at the QR code displayed by your faculty to mark attendance.
-                                    </Typography>
+                                    <ScanIcon sx={{ fontSize: 60, color: 'primary.main' }} />
+                                    <Box sx={{
+                                        position: 'absolute', width: '100%', height: '100%', borderRadius: '50%',
+                                        border: `2px dashed ${theme.palette.primary.main}`,
+                                        animation: 'spin 10s linear infinite',
+                                        '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }
+                                    }} />
+                                </Box>
+
+                                <Typography variant="h6" fontWeight={800} gutterBottom>Ready to Scan</Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 4, px: 2 }}>
+                                    Please ensure you are near the classroom and your camera permissions are enabled.
+                                </Typography>
+
+                                <Stack spacing={2}>
                                     <Button
-                                        variant="contained"
-                                        size="large"
-                                        onClick={startScanner}
-                                        startIcon={<ScanIcon />}
+                                        variant="contained" size="large" onClick={startScanner} startIcon={<ScanIcon />}
+                                        disabled={locationLoading}
                                         sx={{
-                                            py: 2,
-                                            px: 6,
-                                            fontSize: '1.1rem',
-                                            fontWeight: 700,
-                                            borderRadius: 3,
-                                            bgcolor: 'white',
-                                            color: theme.palette.primary.main,
-                                            '&:hover': {
-                                                bgcolor: 'rgba(255,255,255,0.9)',
-                                            },
-                                            boxShadow: '0 8px 20px rgba(0,0,0,0.2)'
+                                            borderRadius: 3, py: 1.8, fontSize: '1.1rem', fontWeight: 700,
+                                            boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.3)}`,
+                                            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                                         }}
                                     >
-                                        Open Scanner
+                                        {locationLoading ? "Fetching Location..." : "Open Scanner"}
                                     </Button>
-                                </Box>
 
-                                <Box sx={{ p: 3 }}>
-                                    <Typography variant="subtitle2" fontWeight="700" color="text.secondary" gutterBottom>
-                                        HOW IT WORKS
-                                    </Typography>
-                                    <Box display="flex" gap={2} alignItems="center" mb={2}>
-                                        <Chip label="1" size="small" color="primary" />
-                                        <Typography variant="body2">Faculty starts an attendance session and displays a QR code</Typography>
+                                    <Divider sx={{ my: 1 }}> <Typography variant="caption" color="text.disabled">OR ENTER CODE</Typography> </Divider>
+
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <TextField
+                                            fullWidth size="small" placeholder="Enter session token..."
+                                            value={manualToken} onChange={(e) => setManualToken(e.target.value)}
+                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                                        />
+                                        <Button
+                                            variant="outlined" onClick={handleManualSubmit} disabled={!manualToken}
+                                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                                        >
+                                            Next
+                                        </Button>
                                     </Box>
-                                    <Box display="flex" gap={2} alignItems="center" mb={2}>
-                                        <Chip label="2" size="small" color="primary" />
-                                        <Typography variant="body2">You scan the QR code using your phone camera</Typography>
-                                    </Box>
-                                    <Box display="flex" gap={2} alignItems="center">
-                                        <Chip label="3" size="small" color="primary" />
-                                        <Typography variant="body2">Your location is verified and attendance is marked</Typography>
-                                    </Box>
-                                </Box>
-                            </Card>
+                                </Stack>
+                            </Box>
 
                             {error && (
-                                <Alert severity="error" sx={{ mt: 2, borderRadius: 3 }}>
-                                    <AlertTitle>Error</AlertTitle>
-                                    {error}
-                                </Alert>
-                            )}
-                        </Box>
-                    </Fade>
-                )}
-
-                {/* SCANNING STATE - Camera active */}
-                {scanning && (
-                    <Fade in timeout={400}>
-                        <Card sx={{
-                            borderRadius: 4,
-                            overflow: 'hidden',
-                            boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
-                            border: '1px solid',
-                            borderColor: 'divider'
-                        }}>
-                            <Box sx={{
-                                p: 2,
-                                bgcolor: isDark ? alpha(theme.palette.common.black, 0.8) : '#1a1a2e',
-                                color: 'white',
-                                textAlign: 'center'
-                            }}>
-                                <Box display="flex" alignItems="center" justifyContent="center" gap={1} mb={1}>
-                                    <Box sx={{
-                                        width: 10,
-                                        height: 10,
-                                        borderRadius: '50%',
-                                        bgcolor: theme.palette.error.main,
-                                        animation: 'pulse 1.5s infinite',
-                                        '@keyframes pulse': {
-                                            '0%': { opacity: 1 },
-                                            '50%': { opacity: 0.3 },
-                                            '100%': { opacity: 1 }
-                                        }
-                                    }} />
-                                    <Typography variant="subtitle2" fontWeight="700" letterSpacing={1}>
-                                        SCANNING...
-                                    </Typography>
+                                <Box sx={{ p: 2 }}>
+                                    <Alert severity="error" sx={{ borderRadius: 3, border: '1px solid', borderColor: 'error.light' }}>
+                                        <AlertTitle>Problem Encountered</AlertTitle>
+                                        {error}
+                                    </Alert>
                                 </Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                    Position the QR code within the frame
-                                </Typography>
-                            </Box>
+                            )}
 
-                            {/* Scanner container */}
-                            <Box sx={{
-                                position: 'relative',
-                                bgcolor: theme.palette.common.black,
-                                '& #qr-reader': {
-                                    border: 'none !important',
-                                    '& video': {
-                                        borderRadius: 0,
-                                    }
-                                },
-                                '& #qr-reader__scan_region': {
-                                    minHeight: 300,
-                                },
-                                '& #qr-reader__dashboard': {
-                                    display: 'none !important'
-                                }
-                            }}>
-                                <div id="qr-reader" ref={scannerContainerRef}></div>
-                            </Box>
-
-                            <Box sx={{ p: 2, textAlign: 'center' }}>
-                                <Button
-                                    variant="outlined"
-                                    color="error"
-                                    onClick={stopScanner}
-                                    size="large"
-                                    fullWidth
-                                    sx={{ fontWeight: 700, borderRadius: 3 }}
-                                >
-                                    Cancel Scan
-                                </Button>
+                            <Box sx={{ p: 3, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="subtitle2" fontWeight={800} gutterBottom>How it works</Typography>
+                                <Stack spacing={1.5}>
+                                    {[
+                                        { icon: <LocationIcon sx={{ fontSize: 18 }} />, text: "Your location is verified to ensure you are in class" },
+                                        { icon: <TimerIcon sx={{ fontSize: 18 }} />, text: "Scan the rolling QR code shown on faculty board" },
+                                        { icon: <PersonIcon sx={{ fontSize: 18 }} />, text: "Attendance is instantly updated in your portal" }
+                                    ].map((item, i) => (
+                                        <Box key={i} display="flex" gap={1.5} alignItems="center">
+                                            <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main' }}>
+                                                {item.icon}
+                                            </Avatar>
+                                            <Typography variant="body2" color="text.secondary">{item.text}</Typography>
+                                        </Box>
+                                    ))}
+                                </Stack>
                             </Box>
                         </Card>
-                    </Fade>
-                )}
+                    )}
 
-                {/* LOADING STATE */}
-                {loading && !result && (
-                    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8}>
-                        <CircularProgress size={48} sx={{ mb: 2 }} />
-                        <Typography variant="body1" fontWeight="600" color="text.secondary">
-                            {sessionInfo ? "Marking attendance..." : "Loading session info..."}
-                        </Typography>
-                    </Box>
-                )}
-
-                {/* SESSION INFO - Confirm before marking */}
-                {sessionInfo && !result && !loading && (
-                    <Fade in timeout={400}>
-                        <Box>
-                            <Card sx={{
-                                borderRadius: 4,
-                                overflow: 'hidden',
-                                boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
-                                border: '1px solid',
-                                borderColor: 'divider'
-                            }}>
-                                <Box sx={{
-                                    p: 3,
-                                    background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-                                    color: 'white',
-                                    textAlign: 'center'
-                                }}>
-                                    <CheckCircleIcon sx={{ fontSize: 48, mb: 1 }} />
-                                    <Typography variant="h5" fontWeight="800">QR Code Verified</Typography>
-                                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                                        Confirm the session details below
-                                    </Typography>
+                    {/* SCANNING STATE */}
+                    {scanning && (
+                        <Fade in timeout={400}>
+                            <Card sx={{ borderRadius: 4, overflow: 'hidden', border: '1px solid', borderColor: 'divider', position: 'relative' }}>
+                                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
+                                    <Box display="flex" alignItems="center" gap={1}>
+                                        <CircularProgress size={16} thickness={6} />
+                                        <Typography variant="subtitle2" fontWeight={800}>SCANNING...</Typography>
+                                    </Box>
+                                    <IconButton size="small" onClick={onCancel}><CloseIcon /></IconButton>
                                 </Box>
 
-                                <Box sx={{ p: 3 }}>
-                                    <Box display="flex" alignItems="center" gap={2} mb={2.5}>
-                                        <Avatar sx={{ bgcolor: 'primary.light', width: 44, height: 44 }}>
-                                            <SchoolIcon />
-                                        </Avatar>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary" fontWeight="600">SUBJECT</Typography>
-                                            <Typography variant="subtitle1" fontWeight="700">
-                                                {sessionInfo.subjectName}
-                                                <Chip label={sessionInfo.subjectCode} size="small" sx={{ ml: 1 }} />
-                                            </Typography>
+                                <Box sx={{ position: 'relative', bgcolor: 'black', minHeight: 400 }}>
+                                    <div id="qr-reader" style={{ width: '100%', height: '100%' }}></div>
+                                    
+                                    {/* Overlay for scan frame */}
+                                    <Box sx={{
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        pointerEvents: 'none', zIndex: 1
+                                    }}>
+                                        <Box sx={{
+                                            width: 260, height: 260, border: '2px solid rgba(255,255,255,0.3)',
+                                            borderRadius: 2, position: 'relative',
+                                            '&::before, &::after, .corner': {
+                                                content: '""', position: 'absolute', width: 20, height: 20,
+                                                borderColor: theme.palette.primary.main, borderStyle: 'solid'
+                                            },
+                                            '&::before': { top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4, borderBottomWidth: 0, borderRightWidth: 0 },
+                                            '&::after': { top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4, borderBottomWidth: 0, borderLeftWidth: 0 },
+                                        }}>
+                                            <Box className="corner" sx={{ bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4, borderTopWidth: 0, borderRightWidth: 0 }} />
+                                            <Box className="corner" sx={{ bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4, borderTopWidth: 0, borderLeftWidth: 0 }} />
                                         </Box>
                                     </Box>
+                                </Box>
 
-                                    <Divider sx={{ my: 1.5 }} />
+                                <Box sx={{ p: 2.5, textAlign: 'center' }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Align the faculty QR code within the highlighted box.
+                                    </Typography>
+                                    <Button variant="text" color="primary" onClick={onCancel} sx={{ mt: 1, fontWeight: 700 }}>
+                                        Cancel & Enter Manually
+                                    </Button>
+                                </Box>
+                            </Card>
+                        </Fade>
+                    )}
 
-                                    <Box display="flex" alignItems="center" gap={2} mb={2.5}>
-                                        <Avatar sx={{ bgcolor: 'secondary.light', width: 44, height: 44 }}>
-                                            <PersonIcon />
-                                        </Avatar>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary" fontWeight="600">FACULTY</Typography>
-                                            <Typography variant="subtitle1" fontWeight="700">{sessionInfo.facultyName}</Typography>
-                                        </Box>
-                                    </Box>
-
-                                    <Divider sx={{ my: 1.5 }} />
-
-                                    <Box display="flex" alignItems="center" gap={2} mb={2.5}>
-                                        <Avatar sx={{ bgcolor: 'info.light', width: 44, height: 44 }}>
-                                            <TimeIcon />
-                                        </Avatar>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary" fontWeight="600">CLASS</Typography>
-                                            <Typography variant="subtitle1" fontWeight="700">{sessionInfo.className}</Typography>
-                                        </Box>
-                                    </Box>
-
-                                    <Divider sx={{ my: 1.5 }} />
-
-                                    {userLocation && (
-                                        <Box display="flex" alignItems="center" gap={2} mb={2}>
-                                            <Avatar sx={{ bgcolor: 'success.light', width: 44, height: 44 }}>
-                                                <LocationIcon />
-                                            </Avatar>
+                    {/* DATA ENRICHED - SESSION INFO FOUND */}
+                    {scannedToken && sessionInfo && !result && (
+                        <Fade in timeout={400}>
+                            <Card sx={{ borderRadius: 4, overflow: 'hidden', border: '1px solid', borderColor: 'primary.light' }}>
+                                <Box sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), borderBottom: '1px solid', borderColor: 'divider' }}>
+                                    <Typography variant="caption" color="primary.main" fontWeight={800}>SESSION IDENTIFIED</Typography>
+                                    <Typography variant="h5" fontWeight={800}>{sessionInfo.subjectName}</Typography>
+                                    <Typography variant="body2" color="text.secondary">{sessionInfo.className} • {sessionInfo.facultyName}</Typography>
+                                </Box>
+                                <CardContent sx={{ p: 3 }}>
+                                    <Stack spacing={2.5}>
+                                        <Box sx={{ display: 'flex', gap: 2 }}>
+                                            <Box sx={{ p: 1, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.1), color: 'info.main' }}>
+                                                <TimerIcon />
+                                            </Box>
                                             <Box>
-                                                <Typography variant="caption" color="text.secondary" fontWeight="600">YOUR LOCATION</Typography>
-                                                <Typography variant="body2" fontWeight="600">
-                                                    {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+                                                <Typography variant="subtitle2" fontWeight={800}>Access Time</Typography>
+                                                <Typography variant="body2" color="text.secondary">Valid until {new Date(sessionInfo.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Typography>
+                                            </Box>
+                                        </Box>
+
+                                        <Box sx={{ display: 'flex', gap: 2 }}>
+                                            <Box sx={{ p: 1, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.main' }}>
+                                                <LocationIcon />
+                                            </Box>
+                                            <Box>
+                                                <Typography variant="subtitle2" fontWeight={800}>Location Verification</Typography>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {userLocation ? `Detected: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Waiting for GPS...'}
                                                 </Typography>
                                             </Box>
                                         </Box>
-                                    )}
-                                </Box>
 
-                                <Box sx={{ p: 3, pt: 0 }}>
-                                    <Button
-                                        variant="contained"
-                                        size="large"
-                                        fullWidth
-                                        onClick={handleMarkAttendance}
-                                        startIcon={<CheckCircleIcon />}
-                                        sx={{
-                                            py: 2,
-                                            fontSize: '1.1rem',
-                                            fontWeight: 700,
-                                            borderRadius: 3,
-                                            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                                            boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
-                                            mb: 1.5
-                                        }}
-                                    >
-                                        Confirm & Mark Attendance
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        size="large"
-                                        fullWidth
-                                        onClick={resetScan}
-                                        sx={{ fontWeight: 600, borderRadius: 3 }}
-                                    >
-                                        Cancel
-                                    </Button>
-                                </Box>
+                                        {error && (
+                                            <Alert severity="error" icon={<ErrorIcon />} sx={{ borderRadius: 2 }}>
+                                                {error}
+                                            </Alert>
+                                        )}
+
+                                        <Box sx={{ display: 'flex', gap: 2, pt: 1 }}>
+                                            <Button variant="outlined" fullWidth onClick={onCancel} sx={{ borderRadius: 2, fontWeight: 700 }}>
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                variant="contained" fullWidth onClick={handleMarkAttendance} disabled={loading}
+                                                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <ApproveIcon />}
+                                                sx={{ borderRadius: 2, fontWeight: 700, px: 4 }}
+                                            >
+                                                {loading ? "Verifying..." : "Mark Attendance"}
+                                            </Button>
+                                        </Box>
+                                    </Stack>
+                                </CardContent>
                             </Card>
+                        </Fade>
+                    )}
 
-                            {error && (
-                                <Alert severity="error" sx={{ mt: 2, borderRadius: 3 }}>
-                                    <AlertTitle>Error</AlertTitle>
-                                    {error}
-                                </Alert>
-                            )}
+                    {/* LOADING STATE FOR INFO */}
+                    {scannedToken && !sessionInfo && !error && !result && (
+                        <Box sx={{ textAlign: 'center', py: 8 }}>
+                            <CircularProgress size={50} thickness={5} sx={{ mb: 2 }} />
+                            <Typography variant="h6" fontWeight={700}>Fetching Session...</Typography>
+                            <Typography variant="body2" color="text.secondary">Connecting to university servers</Typography>
                         </Box>
-                    </Fade>
-                )}
+                    )}
 
-                {/* RESULT STATE */}
-                {result && (
-                    <Fade in timeout={400}>
-                        <Box>
+                    {/* ERROR STATE WITH RETRY */}
+                    {scannedToken && error && !result && !loading && (
+                         <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Avatar sx={{ bgcolor: alpha(theme.palette.error.main, 0.1), color: 'error.main', width: 64, height: 64, mx: 'auto', mb: 2 }}>
+                                <CloseIcon fontSize="large" />
+                            </Avatar>
+                            <Typography variant="h6" fontWeight={800}>Oops! Something went wrong</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>{error}</Typography>
+                            <Button variant="contained" onClick={onCancel} sx={{ borderRadius: 2 }}>Try Again</Button>
+                         </Box>
+                    )}
+
+                    {/* RESULT STATE */}
+                    {result && (
+                        <Fade in timeout={500}>
                             <Card sx={{
-                                borderRadius: 4,
-                                overflow: 'hidden',
-                                boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
-                                border: '1px solid',
-                                borderColor: 'divider'
+                                borderRadius: 4, textAlign: 'center', overflow: 'hidden',
+                                border: '2px solid', borderColor: result.status === 'PRESENT' ? 'success.main' : 'error.main'
                             }}>
                                 <Box sx={{
                                     p: 5,
-                                    textAlign: 'center',
                                     background: result.status === 'PRESENT'
-                                        ? 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
-                                        : result.status === 'REJECTED'
-                                            ? 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)'
-                                            : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                                    color: 'white'
+                                        ? `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.1)}, ${alpha(theme.palette.success.main, 0.02)})`
+                                        : `linear-gradient(135deg, ${alpha(theme.palette.error.main, 0.1)}, ${alpha(theme.palette.error.main, 0.02)})`
                                 }}>
-                                    {result.status === 'PRESENT' ? (
-                                        <CheckCircleIcon sx={{ fontSize: 72, mb: 2 }} />
-                                    ) : (
-                                        <CancelIcon sx={{ fontSize: 72, mb: 2 }} />
-                                    )}
+                                    <Box sx={{
+                                        width: 80, height: 80, borderRadius: '50%', mx: 'auto', mb: 3,
+                                        bgcolor: result.status === 'PRESENT' ? 'success.main' : 'error.main',
+                                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        {result.status === 'PRESENT' ? <CheckIcon sx={{ fontSize: 50 }} /> : <CloseIcon sx={{ fontSize: 50 }} />}
+                                    </Box>
 
-                                    <Typography variant="h4" fontWeight="800" gutterBottom>
-                                        {result.status === 'PRESENT' ? 'Attendance Marked!' : 'Attendance Rejected'}
+                                    <Typography variant="h4" fontWeight={900} color={result.status === 'PRESENT' ? 'success.main' : 'error.main'} gutterBottom>
+                                        {result.status === 'PRESENT' ? 'SUCCESS!' : 'REJECTED'}
                                     </Typography>
 
-                                    <Typography variant="body1" sx={{ opacity: 0.9, mb: 1 }}>
+                                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 3, opacity: 0.8 }}>
                                         {result.message}
                                     </Typography>
 
-                                    {result.subjectName && (
-                                        <Chip
-                                            label={result.subjectName}
-                                            sx={{
-                                                mt: 2,
-                                                bgcolor: 'rgba(255,255,255,0.2)',
-                                                color: 'white',
-                                                fontWeight: 700,
-                                                fontSize: '0.95rem'
-                                            }}
-                                        />
-                                    )}
-                                </Box>
-
-                                <Box sx={{ p: 3 }}>
-                                    <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mb={2}>
-                                        {result.timestamp && `Recorded at: ${new Date(result.timestamp).toLocaleString()}`}
-                                    </Typography>
+                                    <Card sx={{ borderRadius: 3, p: 2, bgcolor: 'background.paper', mb: 4, border: '1px solid', borderColor: 'divider' }}>
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={6}>
+                                                <Typography variant="caption" color="text.secondary">TIME</Typography>
+                                                <Typography variant="subtitle2" fontWeight={800}>{new Date().toLocaleTimeString()}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6}>
+                                                <Typography variant="caption" color="text.secondary">STATUS</Typography>
+                                                <Typography variant="subtitle2" fontWeight={800}>{result.status}</Typography>
+                                            </Grid>
+                                        </Grid>
+                                    </Card>
 
                                     <Button
-                                        variant="contained"
-                                        size="large"
-                                        fullWidth
-                                        onClick={onBack}
-                                        sx={{
-                                            py: 1.5,
-                                            fontWeight: 700,
-                                            borderRadius: 3,
-                                            mb: 1
-                                        }}
+                                        fullWidth variant="contained" onClick={onBack}
+                                        color={result.status === 'PRESENT' ? 'success' : 'error'}
+                                        sx={{ borderRadius: 3, py: 1.5, fontWeight: 700 }}
                                     >
-                                        Back to Dashboard
-                                    </Button>
-
-                                    <Button
-                                        variant="outlined"
-                                        size="large"
-                                        fullWidth
-                                        onClick={resetScan}
-                                        startIcon={<RefreshIcon />}
-                                        sx={{ fontWeight: 600, borderRadius: 3 }}
-                                    >
-                                        Scan Another QR
+                                        Return to Dashboard
                                     </Button>
                                 </Box>
                             </Card>
-                        </Box>
-                    </Fade>
-                )}
-
-                {/* Error only state (no session info) */}
-                {error && !sessionInfo && !scanning && !result && !loading && scannedToken && (
-                    <Alert
-                        severity="error"
-                        sx={{ mt: 2, borderRadius: 3 }}
-                        action={
-                            <Button color="inherit" size="small" onClick={resetScan}>
-                                Try Again
-                            </Button>
-                        }
-                    >
-                        <AlertTitle>Scan Failed</AlertTitle>
-                        {error}
-                    </Alert>
-                )}
-            </Box>
+                        </Fade>
+                    )}
+                </Box>
+            </Fade>
         </Box>
     );
 };

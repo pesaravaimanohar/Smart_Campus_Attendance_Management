@@ -2,6 +2,7 @@ package com.college.smartattendance.config;
 
 import com.college.smartattendance.entity.Role;
 import com.college.smartattendance.entity.User;
+import com.college.smartattendance.repository.FacultyRepository;
 import com.college.smartattendance.repository.UserRepository;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -26,6 +27,9 @@ public class PermissionAspect {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private FacultyRepository facultyRepository;
 
     @Around("@annotation(requiresPermission)")
     public Object checkPermission(ProceedingJoinPoint joinPoint, RequiresPermission requiresPermission)
@@ -62,8 +66,18 @@ public class PermissionAspect {
     }
 
     private String getUserDepartment(User user) {
-        // ADMIN and PRINCIPAL have unrestricted department access via canAccessDepartment()
-        return null;
+        Role role = user.getRole();
+        if (role == Role.ADMIN || role == Role.PRINCIPAL) {
+            return null;
+        }
+        return facultyRepository.findByUser(user)
+                .map(f -> {
+                    if (f.getDepartmentEntity() != null) {
+                        return f.getDepartmentEntity().getCode();
+                    }
+                    return f.getDepartment();
+                })
+                .orElse(null);
     }
 
     private String extractDepartmentFromArgs(ProceedingJoinPoint joinPoint) {

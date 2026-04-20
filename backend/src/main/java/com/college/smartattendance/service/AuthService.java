@@ -25,13 +25,16 @@ public class AuthService {
     private JwtTokenProvider jwtTokenProvider;
 
     public JwtAuthResponse login(LoginDto loginDto) {
+        String normalizedUsername = loginDto.getUsername() != null
+                ? loginDto.getUsername().trim().toLowerCase()
+                : "";
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword()));
+                new UsernamePasswordAuthenticationToken(normalizedUsername, loginDto.getPassword()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
         String token = jwtTokenProvider.generateToken(authentication);
 
-        User user = userRepository.findByUsername(loginDto.getUsername()).orElseThrow();
+        User user = userRepository.findByUsername(normalizedUsername).orElseThrow();
 
         return new JwtAuthResponse(token, "Bearer", user.getRole().name(), user.isFirstLogin());
     }

@@ -18,7 +18,6 @@ import java.io.IOException;
  */
 @RestController
 @RequestMapping("/api/bulk-upload")
-@CrossOrigin(origins = "*")
 public class BulkUploadController {
 
     @Autowired

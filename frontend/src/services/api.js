@@ -56,10 +56,11 @@ export const getCurrentUser = async () => {
     return response.data;
 };
 
-// ==================== ATTENDANCE API (Student & Faculty) ====================
+// ==================== STUDENT ATTENDANCE API ====================
+// All student endpoints are under /student/* to match the backend StudentController
 
 export const markAttendance = async (formData) => {
-    const response = await apiClient.post('/attendance/mark', formData, {
+    const response = await apiClient.post('/student/mark-attendance', formData, {
         headers: {
             'Content-Type': 'multipart/form-data',
         },
@@ -68,39 +69,45 @@ export const markAttendance = async (formData) => {
 };
 
 export const getStudentAnalytics = async () => {
-    const response = await apiClient.get('/attendance/analytics');
+    const response = await apiClient.get('/student/analytics');
     return response.data;
 };
 
 export const getAttendanceStatus = async () => {
-    const response = await apiClient.get('/attendance/status');
+    const response = await apiClient.get('/student/attendance-status');
     return response.data;
 };
 
 export const getTodaySessions = async () => {
-    const response = await apiClient.get('/attendance/sessions/today');
+    const response = await apiClient.get('/student/today-sessions');
     return response.data;
 };
 
 export const getAttendanceHistory = async (limit = 10) => {
-    const response = await apiClient.get('/attendance/history', {
+    const response = await apiClient.get('/student/attendance-history', {
         params: { limit },
     });
     return response.data;
 };
 
 export const getStudentAlerts = async () => {
-    const response = await apiClient.get('/attendance/alerts');
+    const response = await apiClient.get('/student/alerts');
     return response.data;
 };
 
 export const getStudentSubjects = async () => {
-    const response = await apiClient.get('/attendance/subjects');
+    const response = await apiClient.get('/student/subjects');
+    return response.data;
+};
+
+/** Timetable & syllabus for the logged-in student's class (dept + program + semester + section). */
+export const getStudentClassCurriculum = async () => {
+    const response = await apiClient.get('/student/class-curriculum');
     return response.data;
 };
 
 export const getSubjectAttendance = async (subjectId) => {
-    const response = await apiClient.get(`/attendance/subjects/${subjectId}`);
+    const response = await apiClient.get(`/student/subject-attendance/${subjectId}`);
     return response.data;
 };
 
@@ -113,7 +120,12 @@ export const getFacultyMappings = async () => {
 
 export const createSession = async (sessionData) => {
     const response = await apiClient.post('/faculty/sessions', sessionData);
-    return response.data;
+    const data = response.data;
+    // Backend returns { sessionId, qrToken, ... } (stable payload)
+    if (data && (data.sessionId ?? data.id) != null) {
+        return { ...data, id: data.id ?? data.sessionId };
+    }
+    return data;
 };
 
 export const refreshSessionQr = async (sessionId) => {
@@ -122,6 +134,9 @@ export const refreshSessionQr = async (sessionId) => {
 };
 
 export const endSession = async (sessionId) => {
+    if (sessionId === undefined || sessionId === null || sessionId === '' || sessionId === 'undefined') {
+        throw new Error('Invalid session id. Please refresh and try again.');
+    }
     const response = await apiClient.post(`/faculty/sessions/${sessionId}/end`);
     return response.data;
 };
@@ -132,7 +147,7 @@ export const getSessionAttendanceCount = async (sessionId) => {
 };
 
 export const markManualAttendance = async (attendanceData) => {
-    const response = await apiClient.post('/faculty/attendance/manual', attendanceData);
+    const response = await apiClient.post('/faculty/manual-attendance', attendanceData);
     return response.data;
 };
 
@@ -143,6 +158,40 @@ export const getSessionAttendance = async (sessionId) => {
 
 export const updateAttendanceStatus = async (recordId, status, remarks) => {
     const response = await apiClient.patch(`/faculty/attendance/${recordId}/status`, { status, remarks });
+    return response.data;
+};
+
+// ==================== FACULTY DASHBOARD & ANALYTICS API ====================
+
+export const getFacultyDashboard = async () => {
+    const response = await apiClient.get('/faculty/dashboard');
+    return response.data;
+};
+
+export const getSessionHistory = async (limit = 50) => {
+    const response = await apiClient.get('/faculty/sessions/history', { params: { limit } });
+    return response.data;
+};
+
+export const getFacultyClassStats = async () => {
+    const response = await apiClient.get('/faculty/class-stats');
+    return response.data;
+};
+
+export const getSessionReport = async (sessionId) => {
+    const response = await apiClient.get(`/faculty/sessions/${sessionId}/report`);
+    return response.data;
+};
+
+// ==================== REPORTING API (HOD & PRINCIPAL) ====================
+
+export const getHodDashboard = async () => {
+    const response = await apiClient.get('/reports/hod/dashboard');
+    return response.data;
+};
+
+export const getPrincipalDashboard = async () => {
+    const response = await apiClient.get('/reports/principal/dashboard');
     return response.data;
 };
 
@@ -539,6 +588,11 @@ export const adminDataAPI = {
         });
         return response.data;
     },
+};
+
+export const triggerFullSeed = async () => {
+    const response = await apiClient.post('/admin/data/system/seed');
+    return response.data;
 };
 
 export default apiClient;

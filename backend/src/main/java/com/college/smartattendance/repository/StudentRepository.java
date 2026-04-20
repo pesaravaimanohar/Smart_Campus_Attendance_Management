@@ -20,6 +20,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findByCurrentSemester(Integer semester);
     List<Student> findByStatus(StudentStatus status);
     List<Student> findByDepartmentAndCurrentSemester(String department, Integer semester);
+    long countByDepartment(String department);
 
     // via User relationship
     @Query("SELECT s FROM Student s WHERE s.user.role = 'STUDENT'")

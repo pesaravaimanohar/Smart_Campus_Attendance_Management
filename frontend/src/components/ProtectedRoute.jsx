@@ -1,20 +1,33 @@
-import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Box, CircularProgress } from "@mui/material";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
     const { user, loading } = useAuth();
-    const navigate = useNavigate();
 
-    useEffect(() => {
-        if (!loading && !user) {
-            navigate("/login");
-        } else if (!loading && user && allowedRoles && !allowedRoles.includes(user.role)) {
-            navigate("/unauthorized");
-        }
-    }, [user, loading, navigate, allowedRoles]);
+    if (loading) {
+        return (
+            <Box sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '100vh',
+                bgcolor: 'background.default'
+            }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
-    if (loading || !user) return <div>Loading...</div>;
+    // Not authenticated → go to login
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
+    // Authenticated but wrong role → unauthorized
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+        return <Navigate to="/unauthorized" replace />;
+    }
 
     return children;
 };

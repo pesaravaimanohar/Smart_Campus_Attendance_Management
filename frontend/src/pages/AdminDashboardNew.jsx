@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
     Box, Grid, Card, CardContent, Typography, Button, IconButton,
     AppBar, Toolbar, Drawer, List, ListItem, ListItemButton,
     ListItemIcon, ListItemText, Avatar, Divider, Stack, Menu,
-    MenuItem, Badge, Tabs, Tab, Chip, useTheme,
+    MenuItem, Badge, Tabs, Tab, Chip, useTheme, Tooltip, TextField,
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    FormControl, InputLabel, Select,
+    Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -13,6 +16,10 @@ import {
     Notifications as NotificationsIcon, AccountCircle as AccountCircleIcon,
     Logout as LogoutIcon, Groups as GroupsIcon, Assignment as AssignmentIcon,
     MenuBook as SubjectIcon,
+    EventNote as ClassResourcesIcon,
+    DeleteOutline as DeleteOutlineIcon,
+    Edit as EditIcon,
+    ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { adminDataAPI } from '../services/api';
@@ -81,6 +88,148 @@ function Field({ label, children }) {
 }
 const inputSx = { width: '100%', p: '8px 12px', border: '1px solid', borderColor: 'divider', borderRadius: 1, fontSize: 14, bgcolor: 'background.default', color: 'text.primary', outline: 'none' };
 
+const StudentsTable = React.memo(function StudentsTable({ filtered, ts, onEdit, onDelete }) {
+    return (
+        <Card variant="outlined">
+            <Box sx={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                        <tr style={{ background: ts.thBg }}>
+                            {['Roll No', 'Name', 'Email', 'Dept', 'Sem / Sec', 'Status', 'Actions'].map(h => (
+                                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: ts.thColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filtered.length === 0 ? (
+                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: ts.tdEmpty }}>No students found</td></tr>
+                        ) : filtered.map(s => (
+                            <tr key={s.id} style={{ borderTop: `1px solid ${ts.tableBorder}` }}>
+                                <td style={{ padding: '10px 14px' }}><Chip label={s.rollNumber} size="small" color="primary" variant="outlined" /></td>
+                                <td style={{ padding: '10px 14px', fontWeight: 500 }}>{s.firstName} {s.lastName}</td>
+                                <td style={{ padding: '10px 14px', color: ts.tdMuted }}>{s.email || '—'}</td>
+                                <td style={{ padding: '10px 14px' }}>{s.departmentCode || '—'}</td>
+                                <td style={{ padding: '10px 14px' }}>Sem {s.currentSemester} / {s.section}</td>
+                                <td style={{ padding: '10px 14px' }}><Chip label={s.status} size="small" color={s.status === 'ACTIVE' ? 'success' : 'default'} /></td>
+                                <td style={{ padding: '10px 14px' }}>
+                                    <Stack direction="row" gap={0.5} alignItems="center">
+                                        <Tooltip title="Edit"><IconButton size="small" color="primary" onClick={() => onEdit(s)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+                                        <Tooltip title="Delete student"><IconButton size="small" color="error" onClick={() => onDelete(s)}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>
+                                    </Stack>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </Box>
+        </Card>
+    );
+});
+
+const FacultyTable = React.memo(function FacultyTable({ filtered, ts, onEdit, onDelete }) {
+    return (
+        <Card variant="outlined">
+            <Box sx={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                        <tr style={{ background: ts.thBg }}>
+                            {['Faculty ID', 'Name', 'Email', 'Department', 'Role', 'Designation', 'Status', 'Actions'].map(h => (
+                                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: ts.thColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filtered.length === 0 ? (
+                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: ts.tdEmpty }}>No faculty found</td></tr>
+                        ) : filtered.map(f => (
+                            <tr key={f.id} style={{ borderTop: `1px solid ${ts.tableBorder}` }}>
+                                <td style={{ padding: '10px 14px' }}><Chip label={f.facultyId} size="small" color="secondary" variant="outlined" /></td>
+                                <td style={{ padding: '10px 14px', fontWeight: 500 }}>{f.firstName} {f.lastName}</td>
+                                <td style={{ padding: '10px 14px', color: ts.tdMuted }}>{f.email || '—'}</td>
+                                <td style={{ padding: '10px 14px' }}>{f.departmentCode || '—'}</td>
+                                <td style={{ padding: '10px 14px' }}><Chip label={f.role || 'FACULTY'} size="small" variant="outlined" /></td>
+                                <td style={{ padding: '10px 14px' }}>{f.designation || '—'}</td>
+                                <td style={{ padding: '10px 14px' }}><Chip label={f.employmentStatus} size="small" color={f.employmentStatus === 'ACTIVE' ? 'success' : 'default'} /></td>
+                                <td style={{ padding: '10px 14px' }}>
+                                    <Stack direction="row" gap={0.5} alignItems="center">
+                                        <Tooltip title="Edit"><IconButton size="small" color="primary" onClick={() => onEdit(f)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+                                        <Tooltip title="Remove faculty"><IconButton size="small" color="error" onClick={() => onDelete(f)}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>
+                                    </Stack>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </Box>
+        </Card>
+    );
+});
+
+const GroupedStudentsView = React.memo(function GroupedStudentsView({ groups, ts, onEdit, onDelete }) {
+    const deptEntries = Object.entries(groups);
+    if (deptEntries.length === 0) {
+        return (
+            <Card variant="outlined">
+                <Box sx={{ p: 6, textAlign: 'center', color: ts.tdEmpty }}>
+                    No students found
+                </Box>
+            </Card>
+        );
+    }
+
+    return (
+        <Stack spacing={1.5}>
+            {deptEntries.map(([dept, semMap]) => {
+                const deptCount = Object.values(semMap).reduce(
+                    (acc, secMap) => acc + Object.values(secMap).reduce((a, arr) => a + arr.length, 0),
+                    0
+                );
+
+                return (
+                    <Accordion key={dept} defaultExpanded={deptEntries.length <= 2} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
+                                <Chip label={dept || '—'} size="small" color="primary" variant="outlined" />
+                                <Typography fontWeight={800}>Department</Typography>
+                                <Box sx={{ flexGrow: 1 }} />
+                                <Chip label={`${deptCount} students`} size="small" />
+                            </Stack>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Stack spacing={2}>
+                                {Object.entries(semMap)
+                                    .sort((a, b) => Number(a[0]) - Number(b[0]))
+                                    .map(([sem, secMap]) => (
+                                        <Box key={sem}>
+                                            <Typography variant="subtitle2" fontWeight={900} sx={{ mb: 1 }}>
+                                                Semester {sem}
+                                            </Typography>
+                                            <Stack spacing={1.25}>
+                                                {Object.entries(secMap)
+                                                    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+                                                    .map(([sec, students]) => (
+                                                        <Box key={`${sem}-${sec}`}>
+                                                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                                                <Chip label={`Section ${sec || '—'}`} size="small" color="secondary" variant="outlined" />
+                                                                <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                                                                    {students.length} students
+                                                                </Typography>
+                                                            </Stack>
+                                                            <StudentsTable filtered={students} ts={ts} onEdit={onEdit} onDelete={onDelete} />
+                                                        </Box>
+                                                    ))}
+                                            </Stack>
+                                        </Box>
+                                    ))}
+                            </Stack>
+                        </AccordionDetails>
+                    </Accordion>
+                );
+            })}
+        </Stack>
+    );
+});
+
 // Theme-aware table style helpers
 function useTableStyles() {
     const theme = useTheme();
@@ -106,9 +255,11 @@ function StudentsView({ departments, push }) {
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState(null); // null | 'add' | student-obj
     const [search, setSearch] = useState('');
-    const BLANK = { firstName: '', lastName: '', email: '', contactNumber: '', gender: 'MALE', rollNumber: '', studentId: '', departmentCode: '', program: 'B_TECH', currentSemester: 1, section: 'A', admissionYear: new Date().getFullYear(), status: 'ACTIVE' };
+    const [groupedView, setGroupedView] = useState(true);
+    const BLANK = { firstName: '', lastName: '', email: '', contactNumber: '', gender: 'MALE', rollNumber: '', studentId: '', departmentCode: '', program: 'UG', currentSemester: 1, section: 'A', admissionYear: new Date().getFullYear(), status: 'ACTIVE' };
     const [form, setForm] = useState(BLANK);
     const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+    const setV = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
     const load = useCallback(async () => { setLoading(true); try { setRows(await api('GET', '/students')); } catch (e) { push(e.message, 'error'); } finally { setLoading(false); } }, [push]);
     useEffect(() => { load(); }, [load]);
@@ -125,9 +276,31 @@ function StudentsView({ departments, push }) {
         if (!window.confirm(`Delete ${s.firstName} ${s.lastName}?`)) return;
         try { await api('DELETE', `/students/${s.id}`); push('Deleted'); load(); } catch (e) { push(e.message, 'error'); }
     };
-    const openEdit = s => { setForm({ firstName: s.firstName||'', lastName: s.lastName||'', email: s.email||'', contactNumber: s.contactNumber||'', gender: s.gender||'MALE', rollNumber: s.rollNumber||'', studentId: s.studentId||'', departmentCode: s.departmentCode||'', program: s.program||'B_TECH', currentSemester: s.currentSemester||1, section: s.section||'A', admissionYear: s.admissionYear||2024, status: s.status||'ACTIVE' }); setModal(s); };
+    const openEdit = s => { setForm({ firstName: s.firstName||'', lastName: s.lastName||'', email: s.email||'', contactNumber: s.contactNumber||'', gender: s.gender||'MALE', rollNumber: s.rollNumber||'', studentId: s.studentId||'', departmentCode: s.departmentCode||'', program: s.program||'UG', currentSemester: s.currentSemester||1, section: s.section||'A', admissionYear: s.admissionYear||2024, status: s.status||'ACTIVE' }); setModal(s); };
 
-    const filtered = rows.filter(r => `${r.firstName}${r.lastName}${r.rollNumber}${r.email}`.toLowerCase().includes(search.toLowerCase()));
+    // Memoized list to keep typing in the modal snappy (avoid re-rendering table rows on every keystroke)
+    const filtered = useMemo(
+        () => rows.filter(r => `${r.firstName}${r.lastName}${r.rollNumber}${r.email}`.toLowerCase().includes(search.toLowerCase())),
+        [rows, search]
+    );
+
+    const groups = useMemo(() => {
+        // dept -> sem -> section -> students[]
+        const out = {};
+        for (const s of filtered) {
+            const dept = s.departmentCode || '—';
+            const sem = String(s.currentSemester ?? '—');
+            const sec = String(s.section ?? '—');
+            out[dept] = out[dept] || {};
+            out[dept][sem] = out[dept][sem] || {};
+            out[dept][sem][sec] = out[dept][sem][sec] || [];
+            out[dept][sem][sec].push(s);
+        }
+        return out;
+    }, [filtered]);
+
+    const isEdit = !!modal?.id;
+    const dialogOpen = Boolean(modal);
 
     return (
         <Box>
@@ -138,75 +311,135 @@ function StudentsView({ departments, push }) {
 
             {tab === 0 && (
                 <>
-                    <Stack direction="row" gap={2} mb={2} flexWrap="wrap">
-                        <input style={{ ...inputSx, flex: 1, minWidth: 220 }} placeholder="🔍  Search by name, roll number, email…" value={search} onChange={e => setSearch(e.target.value)} />
-                        <Button variant="contained" onClick={() => { setForm({ ...BLANK, departmentCode: safeDepartments[0]?.code || '' }); setModal('add'); }}>+ Add Student</Button>
+                    <Stack direction="row" gap={2} mb={2} flexWrap="wrap" alignItems="center">
+                        <TextField
+                            size="small"
+                            placeholder="Search by name, roll number, email…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            sx={{ flex: 1, minWidth: 240 }}
+                        />
+                        <FormControl size="small" sx={{ minWidth: 180 }}>
+                            <InputLabel>View</InputLabel>
+                            <Select
+                                label="View"
+                                value={groupedView ? 'GROUPED' : 'FLAT'}
+                                onChange={(e) => setGroupedView(e.target.value === 'GROUPED')}
+                            >
+                                <MenuItem value="GROUPED">Grouped (Dept / Sem / Sec)</MenuItem>
+                                <MenuItem value="FLAT">All students (flat)</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Button variant="contained" size="large" onClick={() => { setForm({ ...BLANK, departmentCode: safeDepartments[0]?.code || '' }); setModal('add'); }}>+ Add student</Button>
                     </Stack>
 
                     {loading ? <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading…</Typography> : (
-                        <Card variant="outlined">
-                            <Box sx={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                                    <thead>
-                                        <tr style={{ background: ts.thBg }}>
-                                            {['Roll No', 'Name', 'Email', 'Dept', 'Sem / Sec', 'Status', 'Actions'].map(h => (
-                                                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: ts.thColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filtered.length === 0 ? (
-                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: ts.tdEmpty }}>No students found</td></tr>
-                                        ) : filtered.map(s => (
-                                            <tr key={s.id} style={{ borderTop: `1px solid ${ts.tableBorder}` }}>
-                                                <td style={{ padding: '10px 14px' }}><Chip label={s.rollNumber} size="small" color="primary" variant="outlined" /></td>
-                                                <td style={{ padding: '10px 14px', fontWeight: 500 }}>{s.firstName} {s.lastName}</td>
-                                                <td style={{ padding: '10px 14px', color: ts.tdMuted }}>{s.email || '—'}</td>
-                                                <td style={{ padding: '10px 14px' }}>{s.departmentCode || '—'}</td>
-                                                <td style={{ padding: '10px 14px' }}>Sem {s.currentSemester} / {s.section}</td>
-                                                <td style={{ padding: '10px 14px' }}><Chip label={s.status} size="small" color={s.status === 'ACTIVE' ? 'success' : 'default'} /></td>
-                                                <td style={{ padding: '10px 14px' }}>
-                                                    <Stack direction="row" gap={1}>
-                                                        <Button size="small" onClick={() => openEdit(s)}>Edit</Button>
-                                                        <Button size="small" color="error" onClick={() => del(s)}>Delete</Button>
-                                                    </Stack>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </Box>
-                        </Card>
+                        groupedView
+                            ? <GroupedStudentsView groups={groups} ts={ts} onEdit={openEdit} onDelete={del} />
+                            : <StudentsTable filtered={filtered} ts={ts} onEdit={openEdit} onDelete={del} />
                     )}
                 </>
             )}
 
             {tab === 1 && <BulkUploadModule type="student" />}
 
-            {modal && (
-                <Modal title={modal?.id ? 'Edit Student' : 'Add New Student'} onClose={() => setModal(null)}>
-                    <form onSubmit={submit}>
-                        <Grid container spacing={2}>
-                            <Grid item xs={6}><Field label="First Name *"><input required style={inputSx} value={form.firstName} onChange={set('firstName')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Last Name *"><input required style={inputSx} value={form.lastName} onChange={set('lastName')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Roll Number *"><input required style={inputSx} value={form.rollNumber} onChange={set('rollNumber')} disabled={!!modal?.id} />{!modal?.id && <Typography variant="caption" color="info.main">Used as username & default password</Typography>}</Field></Grid>
-                            <Grid item xs={6}><Field label="Email"><input type="email" style={inputSx} value={form.email} onChange={set('email')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Contact"><input style={inputSx} value={form.contactNumber} onChange={set('contactNumber')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Gender"><select style={inputSx} value={form.gender} onChange={set('gender')}><option>MALE</option><option>FEMALE</option><option>OTHER</option></select></Field></Grid>
-                            <Grid item xs={6}><Field label="Department *"><select required style={inputSx} value={form.departmentCode} onChange={set('departmentCode')}><option value="">— Select —</option>{safeDepartments.map(d => <option key={d.code} value={d.code}>{d.name} ({d.code})</option>)}</select></Field></Grid>
-                            <Grid item xs={6}><Field label="Program"><select style={inputSx} value={form.program} onChange={set('program')}><option value="B_TECH">B.Tech</option><option value="M_TECH">M.Tech</option><option value="MBA">MBA</option><option value="MCA">MCA</option><option value="PHD">PhD</option></select></Field></Grid>
-                            <Grid item xs={4}><Field label="Semester"><input type="number" min={1} max={8} style={inputSx} value={form.currentSemester} onChange={set('currentSemester')} /></Field></Grid>
-                            <Grid item xs={4}><Field label="Section"><input style={inputSx} value={form.section} onChange={set('section')} /></Field></Grid>
-                            <Grid item xs={4}><Field label="Admission Year"><input type="number" style={inputSx} value={form.admissionYear} onChange={set('admissionYear')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Status"><select style={inputSx} value={form.status} onChange={set('status')}><option>ACTIVE</option><option>INACTIVE</option><option>ALUMNI</option></select></Field></Grid>
-                        </Grid>
-                        <Stack direction="row" gap={1} justifyContent="flex-end" mt={3}>
-                            <Button onClick={() => setModal(null)}>Cancel</Button>
-                            <Button type="submit" variant="contained">{modal?.id ? 'Update' : 'Add Student'}</Button>
-                        </Stack>
-                    </form>
-                </Modal>
-            )}
+            <Dialog open={dialogOpen} onClose={() => setModal(null)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                <DialogTitle sx={{ fontWeight: 800 }}>
+                    {isEdit ? 'Edit Student' : 'Add New Student'}
+                </DialogTitle>
+                <DialogContent dividers sx={{ pt: 2.5 }}>
+                    <Box component="form" id="student-form" onSubmit={submit}>
+                        <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                            gap: 2.5,
+                        }}>
+                            <TextField label="First name" value={form.firstName} onChange={set('firstName')} fullWidth required />
+                            <TextField label="Last name" value={form.lastName} onChange={set('lastName')} fullWidth required />
+
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <TextField
+                                    label="Roll number"
+                                    value={form.rollNumber}
+                                    onChange={(e) => {
+                                        const v = e.target.value.toUpperCase();
+                                        setForm(f => ({ ...f, rollNumber: v, studentId: f.studentId || v }));
+                                    }}
+                                    fullWidth
+                                    required
+                                    disabled={isEdit}
+                                    helperText={isEdit ? 'Roll number cannot be changed.' : 'Used as username and default password.'}
+                                />
+                            </Box>
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <TextField
+                                    label="Student ID"
+                                    value={form.studentId}
+                                    onChange={set('studentId')}
+                                    fullWidth
+                                    placeholder="Optional (defaults to roll number)"
+                                />
+                            </Box>
+
+                            <TextField label="Email" type="email" value={form.email} onChange={set('email')} fullWidth />
+                            <TextField label="Contact number" value={form.contactNumber} onChange={set('contactNumber')} fullWidth />
+
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Gender</InputLabel>
+                                    <Select label="Gender" value={form.gender} onChange={(e) => setV('gender', e.target.value)}>
+                                        <MenuItem value="MALE">Male</MenuItem>
+                                        <MenuItem value="FEMALE">Female</MenuItem>
+                                        <MenuItem value="OTHER">Other</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Box>
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <FormControl fullWidth required>
+                                    <InputLabel>Department</InputLabel>
+                                    <Select label="Department" value={form.departmentCode} onChange={(e) => setV('departmentCode', e.target.value)}>
+                                        {safeDepartments.map(d => (
+                                            <MenuItem key={d.code} value={d.code}>
+                                                {d.name} ({d.code})
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Box>
+
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Program</InputLabel>
+                                    <Select label="Program" value={form.program} onChange={(e) => setV('program', e.target.value)}>
+                                        <MenuItem value="UG">Undergraduate (UG)</MenuItem>
+                                        <MenuItem value="PG">Postgraduate (PG)</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Box>
+                            <TextField label="Semester" type="number" value={form.currentSemester} onChange={set('currentSemester')} fullWidth inputProps={{ min: 1, max: 16 }} />
+                            <TextField label="Section" value={form.section} onChange={set('section')} fullWidth />
+
+                            <TextField label="Admission year" type="number" value={form.admissionYear} onChange={set('admissionYear')} fullWidth />
+                            <Box sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Status</InputLabel>
+                                    <Select label="Status" value={form.status} onChange={(e) => setV('status', e.target.value)}>
+                                        <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+                                        <MenuItem value="INACTIVE">INACTIVE</MenuItem>
+                                        <MenuItem value="ALUMNI">ALUMNI</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Box>
+                        </Box>
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setModal(null)}>Cancel</Button>
+                    <Button type="submit" form="student-form" variant="contained">
+                        {isEdit ? 'Update student' : 'Add student'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
@@ -222,9 +455,10 @@ function FacultyView({ departments, push }) {
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState(null);
     const [search, setSearch] = useState('');
-    const BLANK = { firstName: '', lastName: '', email: '', contactNumber: '', gender: 'MALE', facultyId: '', departmentCode: '', designation: 'Assistant Professor', qualifications: '', joiningDate: '', employmentStatus: 'ACTIVE' };
+    const BLANK = { firstName: '', lastName: '', email: '', contactNumber: '', gender: 'MALE', facultyId: '', departmentCode: '', role: 'FACULTY', designation: 'Assistant Professor', qualifications: '', joiningDate: '', employmentStatus: 'ACTIVE' };
     const [form, setForm] = useState(BLANK);
     const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+    const setV = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
     const load = useCallback(async () => { setLoading(true); try { setRows(await api('GET', '/faculty')); } catch (e) { push(e.message, 'error'); } finally { setLoading(false); } }, [push]);
     useEffect(() => { load(); }, [load]);
@@ -241,9 +475,14 @@ function FacultyView({ departments, push }) {
         if (!window.confirm(`Delete ${f.firstName} ${f.lastName}?`)) return;
         try { await api('DELETE', `/faculty/${f.id}`); push('Deleted'); load(); } catch (e) { push(e.message, 'error'); }
     };
-    const openEdit = f => { setForm({ firstName: f.firstName||'', lastName: f.lastName||'', email: f.email||'', contactNumber: f.contactNumber||'', gender: f.gender||'MALE', facultyId: f.facultyId||'', departmentCode: f.departmentCode||'', designation: f.designation||'', qualifications: f.qualifications||'', joiningDate: f.joiningDate||'', employmentStatus: f.employmentStatus||'ACTIVE' }); setModal(f); };
+    const openEdit = f => { setForm({ firstName: f.firstName||'', lastName: f.lastName||'', email: f.email||'', contactNumber: f.contactNumber||'', gender: f.gender||'MALE', facultyId: f.facultyId||'', departmentCode: f.departmentCode||'', role: f.role || 'FACULTY', designation: f.designation||'', qualifications: f.qualifications||'', joiningDate: f.joiningDate||'', employmentStatus: f.employmentStatus||'ACTIVE' }); setModal(f); };
 
-    const filtered = rows.filter(r => `${r.firstName}${r.lastName}${r.facultyId}${r.email}`.toLowerCase().includes(search.toLowerCase()));
+    const filtered = useMemo(
+        () => rows.filter(r => `${r.firstName}${r.lastName}${r.facultyId}${r.email}`.toLowerCase().includes(search.toLowerCase())),
+        [rows, search]
+    );
+    const isEdit = !!modal?.id;
+    const dialogOpen = Boolean(modal);
 
     return (
         <Box>
@@ -254,74 +493,124 @@ function FacultyView({ departments, push }) {
 
             {tab === 0 && (
                 <>
-                    <Stack direction="row" gap={2} mb={2} flexWrap="wrap">
-                        <input style={{ ...inputSx, flex: 1, minWidth: 220 }} placeholder="🔍  Search by name, faculty ID, email…" value={search} onChange={e => setSearch(e.target.value)} />
-                        <Button variant="contained" onClick={() => { setForm({ ...BLANK, departmentCode: safeDepartments[0]?.code || '' }); setModal('add'); }}>+ Add Faculty</Button>
+                    <Stack direction="row" gap={2} mb={2} flexWrap="wrap" alignItems="center">
+                        <TextField
+                            size="small"
+                            placeholder="Search by name, faculty ID, email…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            sx={{ flex: 1, minWidth: 240 }}
+                        />
+                        <Button variant="contained" size="large" onClick={() => { setForm({ ...BLANK, departmentCode: safeDepartments[0]?.code || '' }); setModal('add'); }}>+ Add faculty</Button>
                     </Stack>
 
                     {loading ? <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading…</Typography> : (
-                        <Card variant="outlined">
-                            <Box sx={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                                    <thead>
-                                        <tr style={{ background: ts.thBg }}>
-                                            {['Faculty ID', 'Name', 'Email', 'Department', 'Designation', 'Status', 'Actions'].map(h => (
-                                                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: ts.thColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filtered.length === 0 ? (
-                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: ts.tdEmpty }}>No faculty found</td></tr>
-                                        ) : filtered.map(f => (
-                                            <tr key={f.id} style={{ borderTop: `1px solid ${ts.tableBorder}` }}>
-                                                <td style={{ padding: '10px 14px' }}><Chip label={f.facultyId} size="small" color="secondary" variant="outlined" /></td>
-                                                <td style={{ padding: '10px 14px', fontWeight: 500 }}>{f.firstName} {f.lastName}</td>
-                                                <td style={{ padding: '10px 14px', color: ts.tdMuted }}>{f.email || '—'}</td>
-                                                <td style={{ padding: '10px 14px' }}>{f.departmentCode || '—'}</td>
-                                                <td style={{ padding: '10px 14px' }}>{f.designation || '—'}</td>
-                                                <td style={{ padding: '10px 14px' }}><Chip label={f.employmentStatus} size="small" color={f.employmentStatus === 'ACTIVE' ? 'success' : 'default'} /></td>
-                                                <td style={{ padding: '10px 14px' }}>
-                                                    <Stack direction="row" gap={1}>
-                                                        <Button size="small" onClick={() => openEdit(f)}>Edit</Button>
-                                                        <Button size="small" color="error" onClick={() => del(f)}>Delete</Button>
-                                                    </Stack>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </Box>
-                        </Card>
+                        <FacultyTable filtered={filtered} ts={ts} onEdit={openEdit} onDelete={del} />
                     )}
                 </>
             )}
 
             {tab === 1 && <BulkUploadModule type="faculty" />}
 
-            {modal && (
-                <Modal title={modal?.id ? 'Edit Faculty' : 'Add New Faculty'} onClose={() => setModal(null)}>
-                    <form onSubmit={submit}>
-                        <Grid container spacing={2}>
-                            <Grid item xs={6}><Field label="First Name *"><input required style={inputSx} value={form.firstName} onChange={set('firstName')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Last Name *"><input required style={inputSx} value={form.lastName} onChange={set('lastName')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Faculty ID *"><input required style={inputSx} value={form.facultyId} onChange={set('facultyId')} disabled={!!modal?.id} />{!modal?.id && <Typography variant="caption" color="info.main">Used as username & default password</Typography>}</Field></Grid>
-                            <Grid item xs={6}><Field label="Joining Date"><input type="date" style={inputSx} value={form.joiningDate} onChange={set('joiningDate')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Email"><input type="email" style={inputSx} value={form.email} onChange={set('email')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Contact"><input style={inputSx} value={form.contactNumber} onChange={set('contactNumber')} /></Field></Grid>
-                            <Grid item xs={6}><Field label="Department *"><select required style={inputSx} value={form.departmentCode} onChange={set('departmentCode')}><option value="">— Select —</option>{safeDepartments.map(d => <option key={d.code} value={d.code}>{d.name} ({d.code})</option>)}</select></Field></Grid>
-                            <Grid item xs={6}><Field label="Designation"><select style={inputSx} value={form.designation} onChange={set('designation')}><option>Assistant Professor</option><option>Associate Professor</option><option>Professor</option><option>HOD</option><option>Principal</option><option>Lecturer</option></select></Field></Grid>
-                            <Grid item xs={6}><Field label="Qualifications"><input style={inputSx} value={form.qualifications} onChange={set('qualifications')} placeholder="B.Tech, M.Tech…" /></Field></Grid>
-                            <Grid item xs={6}><Field label="Gender"><select style={inputSx} value={form.gender} onChange={set('gender')}><option>MALE</option><option>FEMALE</option><option>OTHER</option></select></Field></Grid>
-                            <Grid item xs={6}><Field label="Status"><select style={inputSx} value={form.employmentStatus} onChange={set('employmentStatus')}><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option><option value="ON_LEAVE">ON LEAVE</option></select></Field></Grid>
-                        </Grid>
-                        <Stack direction="row" gap={1} justifyContent="flex-end" mt={3}>
-                            <Button onClick={() => setModal(null)}>Cancel</Button>
-                            <Button type="submit" variant="contained">{modal?.id ? 'Update' : 'Add Faculty'}</Button>
-                        </Stack>
-                    </form>
-                </Modal>
-            )}
+            <Dialog open={dialogOpen} onClose={() => setModal(null)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                <DialogTitle sx={{ fontWeight: 800 }}>
+                    {isEdit ? 'Edit Faculty' : 'Add New Faculty'}
+                </DialogTitle>
+                <DialogContent dividers sx={{ pt: 2.5 }}>
+                    <Box component="form" id="faculty-form" onSubmit={submit}>
+                        <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                            gap: 2.5,
+                        }}>
+                            <TextField label="First name" value={form.firstName} onChange={set('firstName')} fullWidth required />
+                            <TextField label="Last name" value={form.lastName} onChange={set('lastName')} fullWidth required />
+
+                            <TextField
+                                label="Faculty ID"
+                                value={form.facultyId}
+                                onChange={(e) => setForm(f => ({ ...f, facultyId: e.target.value.toUpperCase() }))}
+                                fullWidth
+                                required
+                                disabled={isEdit}
+                                helperText={isEdit ? 'Faculty ID cannot be changed.' : 'Used as username and default password.'}
+                            />
+                            <TextField
+                                label="Joining date"
+                                type="date"
+                                value={form.joiningDate || ''}
+                                onChange={set('joiningDate')}
+                                fullWidth
+                                InputLabelProps={{ shrink: true }}
+                            />
+
+                            <TextField label="Email" type="email" value={form.email} onChange={set('email')} fullWidth />
+                            <TextField label="Contact number" value={form.contactNumber} onChange={set('contactNumber')} fullWidth />
+
+                            <FormControl fullWidth required sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <InputLabel>Department</InputLabel>
+                                <Select label="Department" value={form.departmentCode} onChange={(e) => setV('departmentCode', e.target.value)}>
+                                    {safeDepartments.map(d => (
+                                        <MenuItem key={d.code} value={d.code}>
+                                            {d.name} ({d.code})
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth required sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <InputLabel>Account role (permissions)</InputLabel>
+                                <Select label="Account role (permissions)" value={form.role} onChange={(e) => setV('role', e.target.value)}>
+                                    <MenuItem value="FACULTY">Faculty</MenuItem>
+                                    <MenuItem value="HOD">Faculty + HOD</MenuItem>
+                                    <MenuItem value="PRINCIPAL">Faculty + Principal</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
+                                <InputLabel>Academic designation</InputLabel>
+                                <Select label="Academic designation" value={form.designation} onChange={(e) => setV('designation', e.target.value)}>
+                                    <MenuItem value="Assistant Professor">Assistant Professor</MenuItem>
+                                    <MenuItem value="Associate Professor">Associate Professor</MenuItem>
+                                    <MenuItem value="Professor">Professor</MenuItem>
+                                    <MenuItem value="Lecturer">Lecturer</MenuItem>
+                                    <MenuItem value="Adjunct Faculty">Adjunct Faculty</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <TextField label="Qualifications" value={form.qualifications} onChange={set('qualifications')} fullWidth placeholder="B.Tech, M.Tech…" />
+
+                            <FormControl fullWidth>
+                                <InputLabel>Gender</InputLabel>
+                                <Select label="Gender" value={form.gender} onChange={(e) => setV('gender', e.target.value)}>
+                                    <MenuItem value="MALE">Male</MenuItem>
+                                    <MenuItem value="FEMALE">Female</MenuItem>
+                                    <MenuItem value="OTHER">Other</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth>
+                                <InputLabel>Status</InputLabel>
+                                <Select label="Status" value={form.employmentStatus} onChange={(e) => setV('employmentStatus', e.target.value)}>
+                                    <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+                                    <MenuItem value="INACTIVE">INACTIVE</MenuItem>
+                                    <MenuItem value="ON_LEAVE">ON LEAVE</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="caption" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
+                                Teaching staff use the same portal; HOD/Principal add department or college duties.
+                            </Typography>
+                        </Box>
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setModal(null)}>Cancel</Button>
+                    <Button type="submit" form="faculty-form" variant="contained">
+                        {isEdit ? 'Update faculty' : 'Add faculty'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
@@ -576,6 +865,122 @@ function AssignmentsView({ push }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// CLASS TIMETABLE & SYLLABUS (per dept / program / semester / optional section)
+// ═══════════════════════════════════════════════════════════════════════════════
+function ClassResourcesView({ departments, push }) {
+    const safeDepartments = asArray(departments);
+    const ts = useTableStyles();
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [modal, setModal] = useState(null);
+    const BLANK = { departmentCode: '', program: 'UG', semester: 1, sectionKey: '', timetableText: '', syllabusText: '', syllabusUrl: '' };
+    const [form, setForm] = useState(BLANK);
+    const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { setRows(asArray(await api('GET', '/class-curriculum'))); } catch (e) { push(e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [push]);
+    useEffect(() => { load(); }, [load]);
+
+    const submit = async e => {
+        e.preventDefault();
+        try {
+            const body = { ...form, semester: parseInt(form.semester, 10) || 1 };
+            if (modal?.id) await api('PUT', `/class-curriculum/${modal.id}`, body);
+            else await api('POST', '/class-curriculum', body);
+            push('Saved');
+            setModal(null);
+            load();
+        } catch (err) { push(err.message, 'error'); }
+    };
+    const del = async r => {
+        if (!window.confirm('Delete this class timetable / syllabus entry?')) return;
+        try { await api('DELETE', `/class-curriculum/${r.id}`); push('Removed'); load(); } catch (e) { push(e.message, 'error'); }
+    };
+    const openAdd = () => { setForm({ ...BLANK, departmentCode: safeDepartments[0]?.code || '' }); setModal('add'); };
+    const openEdit = r => {
+        setForm({
+            departmentCode: r.departmentCode || '',
+            program: r.program || 'UG',
+            semester: r.semester || 1,
+            sectionKey: r.sectionKey ?? '',
+            timetableText: r.timetableText || '',
+            syllabusText: r.syllabusText || '',
+            syllabusUrl: r.syllabusUrl || '',
+        });
+        setModal(r);
+    };
+
+    return (
+        <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                One row per class group: match students by department, UG/PG, semester, and optionally section.
+                Leave section blank to apply the same timetable and syllabus to every section in that semester.
+            </Typography>
+            <Stack direction="row" gap={2} mb={2} flexWrap="wrap">
+                <Button variant="contained" size="large" onClick={openAdd}>+ Add timetable / syllabus</Button>
+                <Button variant="outlined" onClick={load} disabled={loading}>Refresh</Button>
+            </Stack>
+            {loading ? <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading…</Typography> : (
+                <Card variant="outlined">
+                    <Box sx={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                            <thead>
+                                <tr style={{ background: ts.thBg }}>
+                                    {['Dept', 'Program', 'Sem', 'Section', 'Updated', 'Actions'].map(h => (
+                                        <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: ts.thColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.length === 0 ? (
+                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: ts.tdEmpty }}>No entries yet</td></tr>
+                                ) : rows.map(r => (
+                                    <tr key={r.id} style={{ borderTop: `1px solid ${ts.tableBorder}` }}>
+                                        <td style={{ padding: '10px 14px' }}><Chip label={r.departmentCode} size="small" variant="outlined" /></td>
+                                        <td style={{ padding: '10px 14px' }}>{r.program}</td>
+                                        <td style={{ padding: '10px 14px' }}>{r.semester}</td>
+                                        <td style={{ padding: '10px 14px', color: ts.tdMuted }}>{r.sectionKey === '' || r.sectionKey == null ? 'All' : r.sectionKey}</td>
+                                        <td style={{ padding: '10px 14px', fontSize: 12, color: ts.tdSub }}>{r.updatedAt ? new Date(r.updatedAt).toLocaleString() : '—'}</td>
+                                        <td style={{ padding: '10px 14px' }}>
+                                            <Stack direction="row" gap={0.5}>
+                                                <Tooltip title="Edit"><IconButton size="small" color="primary" onClick={() => openEdit(r)}><EditIcon fontSize="small" /></IconButton></Tooltip>
+                                                <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => del(r)}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>
+                                            </Stack>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Box>
+                </Card>
+            )}
+            {modal && (
+                <Modal title={modal?.id ? 'Edit timetable & syllabus' : 'Add timetable & syllabus'} onClose={() => setModal(null)}>
+                    <form onSubmit={submit}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}><Field label="Department *"><select required style={inputSx} value={form.departmentCode} onChange={set('departmentCode')}><option value="">— Select —</option>{safeDepartments.map(d => <option key={d.code} value={d.code}>{d.name} ({d.code})</option>)}</select></Field></Grid>
+                            <Grid item xs={6} sm={3}><Field label="Program *"><select required style={inputSx} value={form.program} onChange={set('program')}><option value="UG">UG</option><option value="PG">PG</option></select></Field></Grid>
+                            <Grid item xs={6} sm={3}><Field label="Semester *"><input required type="number" min={1} max={16} style={inputSx} value={form.semester} onChange={set('semester')} /></Field></Grid>
+                            <Grid item xs={12}><Field label="Section (optional)"><input style={inputSx} value={form.sectionKey} onChange={set('sectionKey')} placeholder="Leave empty for all sections, or e.g. A" /></Field></Grid>
+                            <Grid item xs={12}><Field label="Timetable"><TextField multiline minRows={4} fullWidth value={form.timetableText} onChange={e => setForm(f => ({ ...f, timetableText: e.target.value }))} placeholder="Period-wise timetable, links, or notes…" size="small" /></Field></Grid>
+                            <Grid item xs={12}><Field label="Syllabus"><TextField multiline minRows={4} fullWidth value={form.syllabusText} onChange={e => setForm(f => ({ ...f, syllabusText: e.target.value }))} placeholder="Units, topics, references…" size="small" /></Field></Grid>
+                            <Grid item xs={12}><Field label="Syllabus link (optional)"><input style={inputSx} value={form.syllabusUrl} onChange={set('syllabusUrl')} placeholder="https://…" /></Field></Grid>
+                        </Grid>
+                        <Stack direction="row" gap={1} justifyContent="flex-end" mt={3}>
+                            <Button onClick={() => setModal(null)}>Cancel</Button>
+                            <Button type="submit" variant="contained">Save</Button>
+                        </Stack>
+                    </form>
+                </Modal>
+            )}
+        </Box>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN ADMIN DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 const DRAWER_WIDTH = 240;
@@ -586,6 +991,7 @@ const MENU = [
     { id: 'faculty',      label: 'Faculty',             icon: <GroupsIcon /> },
     { id: 'subjects',     label: 'Subjects & Depts',    icon: <SubjectIcon /> },
     { id: 'assignments',  label: 'Subject Assignments', icon: <AssignmentIcon /> },
+    { id: 'classinfo',    label: 'Timetable & Syllabus', icon: <ClassResourcesIcon /> },
     { id: 'divider' },
     { id: 'promotion',    label: 'Semester Promotion',  icon: <TrendingUpIcon /> },
     { id: 'reports',      label: 'Reports & Analytics', icon: <AssessmentIcon /> },
@@ -663,6 +1069,7 @@ const AdminDashboardNew = () => {
                             { label: '+ Add Subject', color: 'info', action: () => setActiveView('subjects') },
                             { label: 'Assign Subjects', color: 'warning', action: () => setActiveView('assignments') },
                             { label: 'Semester Promotion', color: 'success', action: () => setActiveView('promotion') },
+                            { label: 'Timetable & Syllabus', color: 'primary', action: () => setActiveView('classinfo') },
                         ].map(a => (
                             <Grid item xs={12} sm={6} md key={a.label}>
                                 <Button fullWidth variant="outlined" color={a.color} onClick={a.action} sx={{ py: 1.75, fontWeight: 600 }}>{a.label}</Button>
@@ -692,6 +1099,7 @@ const AdminDashboardNew = () => {
             case 'faculty':     return <FacultyView departments={departments} push={push} />;
             case 'subjects':    return <SubjectsView push={push} onDeptsChange={setDepartments} />;
             case 'assignments': return <AssignmentsView push={push} />;
+            case 'classinfo':   return <ClassResourcesView departments={departments} push={push} />;
             case 'promotion':   return <PromotionEngineModule />;
             default: return <Card><CardContent><Typography>{activeView} — coming soon</Typography></CardContent></Card>;
         }

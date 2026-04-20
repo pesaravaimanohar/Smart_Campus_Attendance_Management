@@ -6,6 +6,11 @@ import {
     Paper, Button, Stack, Divider
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+    ResponsiveContainer, AreaChart, Area, Cell
+} from 'recharts';
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import {
     BarChart as BarChartIcon,
@@ -20,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import StatsCard from '../components/StatsCard';
+import { getHodDashboard } from "../services/api";
 
 const HODDashboard = () => {
     const { user } = useAuth();
@@ -27,40 +33,31 @@ const HODDashboard = () => {
     const isDark = theme.palette.mode === 'dark';
 
     const [activeSection, setActiveSection] = useState('dashboard');
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-    // Stats — these come from mock for now (will be API-driven later)
-    const stats = {
-        totalFaculty: 12,
-        totalStudents: 145,
-        avgAttendance: 82.5,
-        activeSessions: 3,
-    };
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await getHodDashboard();
+            setData(res);
+        } catch (e) {
+            setError(e.response?.data?.message || "Failed to load department data");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-    const weeklyData = [
-        { day: 'Mon', value: 78, classes: 24 },
-        { day: 'Tue', value: 85, classes: 26 },
-        { day: 'Wed', value: 72, classes: 22 },
-        { day: 'Thu', value: 88, classes: 28 },
-        { day: 'Fri', value: 65, classes: 20 },
-        { day: 'Sat', value: 45, classes: 12 },
-    ];
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
-    const defaulters = [
-        { name: "Ravi Kumar", rollNo: "21001A0501", status: "Critical", val: 48.5 },
-        { name: "Priya Sharma", rollNo: "21001A0512", status: "Warning", val: 62.1 },
-        { name: "Ankit Reddy", rollNo: "21001A0503", status: "Critical", val: 45.0 },
-        { name: "Sneha Patel", rollNo: "21001A0520", status: "Warning", val: 64.2 },
-        { name: "Mohammed Ali", rollNo: "21001A0508", status: "Critical", val: 51.8 },
-    ];
+    if (loading) return <Box p={4}><LinearProgress /></Box>;
+    if (error) return <Box p={4}><Typography color="error">{error}</Typography></Box>;
+    if (!data) return null;
 
-    const facultyPerformance = [
-        { name: 'Dr. Ramesh K', subject: 'Data Structures', avg: 88, sessions: 42 },
-        { name: 'Prof. Sunitha M', subject: 'DBMS', avg: 76, sessions: 38 },
-        { name: 'Dr. Venkat R', subject: 'OS', avg: 82, sessions: 40 },
-        { name: 'Prof. Lakshmi N', subject: 'CN', avg: 69, sessions: 35 },
-    ];
-
-    const maxBarValue = Math.max(...weeklyData.map(d => d.value));
+    const { totalFaculty, totalStudents, avgAttendance, activeSessions, weeklyTrends, defaulters, facultyPerformance } = data;
 
     const menuItems = [
         { id: 'dashboard', icon: <BarChartIcon />, label: 'Dashboard' },
@@ -73,10 +70,29 @@ const HODDashboard = () => {
 
     const currentLabel = menuItems.find(m => m.id === activeSection)?.label || 'Dashboard';
 
+    // Custom Tooltip for Recharts
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <Paper sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', boxShadow: theme.shadows[4] }}>
+                    <Typography variant="subtitle2" fontWeight={700}>{label}</Typography>
+                    <Divider sx={{ my: 0.5 }} />
+                    <Typography variant="body2" color="primary.main">
+                        Attendance: <strong>{payload[0].value}%</strong>
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        Classes held: {payload[0].payload.classes || 0}
+                    </Typography>
+                </Paper>
+            );
+        }
+        return null;
+    };
+
     return (
         <DashboardLayout
             title={currentLabel}
-            subtitle="Department Head • CSE"
+            subtitle={`Department Head • ${user?.department || 'CSE'}`}
             portalIcon={<BarChartIcon />}
             portalTitle="HOD PANEL"
             portalSubtitle="Department Head"
@@ -93,7 +109,7 @@ const HODDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Total Faculty"
-                                    value={stats.totalFaculty}
+                                    value={totalFaculty}
                                     icon={<PeopleIcon />}
                                     color={theme.palette.primary.main}
                                     trend="+2 this sem"
@@ -103,7 +119,7 @@ const HODDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Total Students"
-                                    value={stats.totalStudents}
+                                    value={totalStudents}
                                     icon={<GroupsIcon />}
                                     color="#EC407A"
                                     trend="+8 new enrollments"
@@ -113,7 +129,7 @@ const HODDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Avg Attendance"
-                                    value={stats.avgAttendance + '%'}
+                                    value={avgAttendance + '%'}
                                     icon={<BarChartIcon />}
                                     color={theme.palette.success.main}
                                     trend="+5% this week"
@@ -123,7 +139,7 @@ const HODDashboard = () => {
                             <Grid item xs={12} sm={6} md={3}>
                                 <StatsCard
                                     title="Active Sessions"
-                                    value={stats.activeSessions}
+                                    value={activeSessions}
                                     icon={<CalendarIcon />}
                                     color={theme.palette.warning.main}
                                     subtitle="running now"
@@ -144,11 +160,11 @@ const HODDashboard = () => {
                                                 color: 'primary.main',
                                                 width: 36, height: 36,
                                             }}>
-                                                <BarChartIcon fontSize="small" />
+                                                <TrendingUpIcon fontSize="small" />
                                             </Avatar>
                                             <Box>
                                                 <Typography variant="h6" fontWeight={700} color="text.primary">Attendance Trends</Typography>
-                                                <Typography variant="caption" color="text.secondary">Weekly overview</Typography>
+                                                <Typography variant="caption" color="text.secondary">Weekly performance analysis</Typography>
                                             </Box>
                                         </Box>
                                         <Select
@@ -159,72 +175,56 @@ const HODDashboard = () => {
                                                 bgcolor: alpha(theme.palette.background.default, 0.5),
                                             }}
                                         >
-                                            <MenuItem value="week">This Week</MenuItem>
-                                            <MenuItem value="month">This Month</MenuItem>
+                                            <MenuItem value="week">Last 7 Days</MenuItem>
+                                            <MenuItem value="month">Current Month</MenuItem>
                                         </Select>
                                     </Box>
 
-                                    {/* CSS Bar Chart */}
-                                    <Box sx={{
-                                        display: 'flex',
-                                        alignItems: 'flex-end',
-                                        justifyContent: 'space-around',
-                                        height: 260,
-                                        px: 2,
-                                        pt: 2,
-                                        pb: 1,
-                                        bgcolor: alpha(theme.palette.background.default, isDark ? 0.3 : 0.5),
-                                        borderRadius: 2,
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                    }}>
-                                        {weeklyData.map((item, i) => (
-                                            <Box key={i} display="flex" flexDirection="column" alignItems="center" width="12%">
-                                                <Typography variant="caption" fontWeight={700} color="text.secondary" mb={0.5}>
-                                                    {item.value}%
-                                                </Typography>
-                                                <Tooltip title={`${item.value}% — ${item.classes} classes`}>
-                                                    <Box
-                                                        sx={{
-                                                            width: '70%',
-                                                            height: `${(item.value / 100) * 200}px`,
-                                                            background: item.value < 60
-                                                                ? `linear-gradient(180deg, ${alpha(theme.palette.error.main, 0.7)}, ${theme.palette.error.main})`
-                                                                : item.value < 75
-                                                                    ? `linear-gradient(180deg, ${alpha(theme.palette.warning.main, 0.7)}, ${theme.palette.warning.main})`
-                                                                    : `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.6)}, ${theme.palette.primary.main})`,
-                                                            borderRadius: '8px 8px 0 0',
-                                                            transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                                                            animation: `growUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.1}s both`,
-                                                            '@keyframes growUp': {
-                                                                from: { height: 0, opacity: 0 },
-                                                                to: { height: `${(item.value / 100) * 200}px`, opacity: 1 },
-                                                            },
-                                                            cursor: 'pointer',
-                                                            '&:hover': {
-                                                                transform: 'scaleY(1.05)',
-                                                                filter: 'brightness(1.1)',
-                                                            },
-                                                        }}
-                                                    />
-                                                </Tooltip>
-                                                <Typography variant="caption" sx={{ mt: 1, color: 'text.secondary', fontWeight: 700 }}>
-                                                    {item.day}
-                                                </Typography>
-                                            </Box>
-                                        ))}
+                                    <Box sx={{ height: 300, mt: 2 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={weeklyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+                                                <XAxis 
+                                                    dataKey="day" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fontSize: 12, fontWeight: 600, fill: theme.palette.text.secondary }}
+                                                    dy={10}
+                                                />
+                                                <YAxis 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fontSize: 12, fontWeight: 600, fill: theme.palette.text.secondary }}
+                                                    domain={[0, 100]}
+                                                />
+                                                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: alpha(theme.palette.primary.main, 0.05), radius: 8 }} />
+                                                <Bar 
+                                                    dataKey="value" 
+                                                    radius={[6, 6, 0, 0]} 
+                                                    barSize={40}
+                                                    animationDuration={1500}
+                                                >
+                                                    {weeklyTrends.map((entry, index) => (
+                                                        <Cell 
+                                                            key={`cell-${index}`} 
+                                                            fill={entry.value < 65 ? theme.palette.error.main : entry.value < 75 ? theme.palette.warning.main : theme.palette.primary.main} 
+                                                            fillOpacity={0.85}
+                                                        />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </Box>
 
-                                    {/* Legend */}
-                                    <Stack direction="row" gap={2} mt={2} justifyContent="center">
+                                    <Stack direction="row" gap={3} mt={3} justifyContent="center">
                                         {[
-                                            { label: '< 60% Critical', color: theme.palette.error.main },
-                                            { label: '60-75% Warning', color: theme.palette.warning.main },
-                                            { label: '> 75% Good', color: theme.palette.primary.main },
+                                            { label: 'Critical (<65%)', color: theme.palette.error.main },
+                                            { label: 'Warning (65-75%)', color: theme.palette.warning.main },
+                                            { label: 'Good (>75%)', color: theme.palette.primary.main },
                                         ].map(l => (
-                                            <Box key={l.label} display="flex" alignItems="center" gap={0.5}>
-                                                <Box sx={{ width: 10, height: 10, borderRadius: 1, bgcolor: l.color }} />
-                                                <Typography variant="caption" color="text.secondary">{l.label}</Typography>
+                                            <Box key={l.label} display="flex" alignItems="center" gap={1}>
+                                                <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: l.color }} />
+                                                <Typography variant="caption" fontWeight={600} color="text.secondary">{l.label}</Typography>
                                             </Box>
                                         ))}
                                     </Stack>
@@ -255,6 +255,10 @@ const HODDashboard = () => {
                                             {defaulters.map((row, idx) => (
                                                 <Box
                                                     key={idx}
+                                                    component={motion.div}
+                                                    initial={{ opacity: 0, x: 20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: idx * 0.1 }}
                                                     sx={{
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -270,17 +274,13 @@ const HODDashboard = () => {
                                                             row.status === 'Critical' ? theme.palette.error.main : theme.palette.warning.main,
                                                             0.15
                                                         ),
-                                                        transition: 'all 0.2s ease',
-                                                        animation: `fadeIn 0.3s ease-out ${idx * 0.05}s both`,
-                                                        '@keyframes fadeIn': {
-                                                            from: { opacity: 0, transform: 'translateX(8px)' },
-                                                            to: { opacity: 1, transform: 'translateX(0)' },
-                                                        },
                                                         '&:hover': {
                                                             bgcolor: alpha(
                                                                 row.status === 'Critical' ? theme.palette.error.main : theme.palette.warning.main,
                                                                 isDark ? 0.1 : 0.06
                                                             ),
+                                                            transform: 'translateY(-2px)',
+                                                            transition: 'all 0.2s ease',
                                                         },
                                                     }}
                                                 >
@@ -325,7 +325,7 @@ const HODDashboard = () => {
                                             fullWidth
                                             sx={{ mt: 2, fontWeight: 700, borderRadius: 2 }}
                                         >
-                                            View All Defaulters
+                                            View Detailed Report
                                         </Button>
                                     </CardContent>
                                 </Card>
@@ -344,32 +344,32 @@ const HODDashboard = () => {
                                                 <SchoolIcon fontSize="small" />
                                             </Avatar>
                                             <Box>
-                                                <Typography variant="subtitle1" fontWeight={700} color="text.primary">Faculty Performance</Typography>
-                                                <Typography variant="caption" color="text.secondary">Average attendance in their classes</Typography>
+                                                <Typography variant="subtitle1" fontWeight={700} color="text.primary">Faculty Performance Metrics</Typography>
+                                                <Typography variant="caption" color="text.secondary">Engagement analysis based on class attendance</Typography>
                                             </Box>
                                         </Box>
                                     </Box>
                                     <TableContainer>
                                         <Table>
                                             <TableHead>
-                                                <TableRow>
-                                                    <TableCell>Faculty</TableCell>
-                                                    <TableCell>Subject</TableCell>
-                                                    <TableCell align="center">Sessions</TableCell>
-                                                    <TableCell align="center">Avg Attendance</TableCell>
-                                                    <TableCell align="right">Performance</TableCell>
+                                                <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                                                    <TableCell sx={{ fontWeight: 700 }}>Faculty Member</TableCell>
+                                                    <TableCell sx={{ fontWeight: 700 }}>Primary Subject</TableCell>
+                                                    <TableCell align="center" sx={{ fontWeight: 700 }}>Sessions</TableCell>
+                                                    <TableCell align="center" sx={{ fontWeight: 700 }}>Avg Attendance</TableCell>
+                                                    <TableCell align="right" sx={{ fontWeight: 700 }}>Efficiency</TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
                                                 {facultyPerformance.map((fac, i) => {
-                                                    const perfColor = fac.avg >= 80 ? 'success' : fac.avg >= 70 ? 'warning' : 'error';
+                                                    const perfColor = fac.avg >= 85 ? 'success' : fac.avg >= 70 ? 'warning' : 'error';
                                                     return (
                                                         <TableRow key={i} hover>
                                                             <TableCell>
                                                                 <Box display="flex" alignItems="center" gap={1.5}>
-                                                                    <Avatar sx={{
+                                                                    <Avatar src={fac.avatar} sx={{
                                                                         width: 32, height: 32, fontSize: '0.8rem',
-                                                                        bgcolor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
+                                                                        bgcolor: alpha(theme.palette.primary.main, 0.1),
                                                                         color: 'primary.main',
                                                                     }}>
                                                                         {fac.name.charAt(0)}
@@ -381,26 +381,27 @@ const HODDashboard = () => {
                                                                 <Typography variant="body2" color="text.secondary">{fac.subject}</Typography>
                                                             </TableCell>
                                                             <TableCell align="center">
-                                                                <Typography variant="body2" fontWeight={600} color="text.primary">{fac.sessions}</Typography>
+                                                                <Typography variant="body2" fontWeight={600}>{fac.sessions}</Typography>
                                                             </TableCell>
                                                             <TableCell align="center">
-                                                                <Box display="flex" alignItems="center" gap={1} justifyContent="center">
-                                                                    <LinearProgress
-                                                                        variant="determinate"
-                                                                        value={fac.avg}
-                                                                        color={perfColor}
-                                                                        sx={{ width: 60, height: 6, borderRadius: 3 }}
-                                                                    />
-                                                                    <Typography variant="body2" fontWeight={700} color="text.primary">{fac.avg}%</Typography>
+                                                                <Box display="flex" alignItems="center" gap={1.5} justifyContent="center">
+                                                                    <Box sx={{ width: 80 }}>
+                                                                        <LinearProgress
+                                                                            variant="determinate"
+                                                                            value={fac.avg}
+                                                                            color={perfColor}
+                                                                            sx={{ height: 6, borderRadius: 3 }}
+                                                                        />
+                                                                    </Box>
+                                                                    <Typography variant="body2" fontWeight={800}>{fac.avg}%</Typography>
                                                                 </Box>
                                                             </TableCell>
                                                             <TableCell align="right">
                                                                 <Chip
-                                                                    label={fac.avg >= 80 ? 'Excellent' : fac.avg >= 70 ? 'Good' : 'Needs Improvement'}
+                                                                    label={fac.avg >= 85 ? 'Excellent' : fac.avg >= 70 ? 'Good' : 'Review'}
                                                                     size="small"
                                                                     color={perfColor}
-                                                                    variant="outlined"
-                                                                    sx={{ fontWeight: 600 }}
+                                                                    sx={{ fontWeight: 700 }}
                                                                 />
                                                             </TableCell>
                                                         </TableRow>
@@ -416,23 +417,15 @@ const HODDashboard = () => {
                 </Fade>
             )}
 
-            {/* Other sections placeholder */}
+            {/* Placeholder for other sections */}
             {activeSection !== 'dashboard' && (
-                <Fade in timeout={400}>
-                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh" flexDirection="column">
-                        <Box sx={{
-                            width: 120, height: 120,
-                            bgcolor: alpha(theme.palette.text.primary, 0.04),
-                            borderRadius: '50%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            mb: 3,
-                        }}>
-                            <BarChartIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
-                        </Box>
-                        <Typography variant="h5" color="text.secondary" fontWeight={700}>{currentLabel}</Typography>
-                        <Typography color="text.disabled" sx={{ mt: 1 }}>This module is coming soon.</Typography>
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh" flexDirection="column">
+                    <Box component={motion.div} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                         <AssessmentIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
                     </Box>
-                </Fade>
+                    <Typography variant="h5" color="text.secondary" fontWeight={700}>{currentLabel}</Typography>
+                    <Typography color="text.disabled">Advanced analysis for this module is being generated.</Typography>
+                </Box>
             )}
         </DashboardLayout>
     );

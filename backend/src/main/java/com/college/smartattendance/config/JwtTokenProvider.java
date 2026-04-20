@@ -1,13 +1,17 @@
 package com.college.smartattendance.config;
 
+import com.college.smartattendance.entity.User;
+import com.college.smartattendance.repository.UserRepository;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.Optional;
 
 @Component
 public class JwtTokenProvider {
@@ -17,6 +21,9 @@ public class JwtTokenProvider {
 
     @Value("${app.jwtExpirationInMs}")
     private int jwtExpirationInMs;
+
+    @Autowired
+    private UserRepository userRepository;
 
     private Key key() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
@@ -32,9 +39,20 @@ public class JwtTokenProvider {
                 .map(item -> item.getAuthority().replace("ROLE_", ""))
                 .orElse("STUDENT");
 
-        return Jwts.builder()
+        // Fetch user details for name claims
+        JwtBuilder builder = Jwts.builder()
                 .setSubject(username)
-                .claim("role", role)
+                .claim("role", role);
+
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (user.getFirstName() != null) builder.claim("firstName", user.getFirstName());
+            if (user.getLastName() != null) builder.claim("lastName", user.getLastName());
+            if (user.getEmail() != null) builder.claim("email", user.getEmail());
+        }
+
+        return builder
                 .setIssuedAt(new Date())
                 .setExpiration(expireDate)
                 .signWith(key(), SignatureAlgorithm.HS512)

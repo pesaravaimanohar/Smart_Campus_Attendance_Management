@@ -50,9 +50,6 @@ public class BulkUploadService {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private UserService userService;
-
-    @Autowired
     private AuditService auditService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -152,11 +149,12 @@ public class BulkUploadService {
                         new TypeReference<Map<String, String>>() {
                         });
 
-                String rollNumber = data.get("rollNumber");
+                String rollNumber = data.getOrDefault("rollNumber", "").trim();
+                String username = rollNumber.toLowerCase();
 
                 // Double-check not already exists (could have been imported between validate
                 // and confirm)
-                if (userRepository.existsByUsername(rollNumber)) {
+                if (userRepository.existsByUsername(username)) {
                     continue;
                 }
 
@@ -201,10 +199,11 @@ public class BulkUploadService {
 
         for (Map<String, String> data : validData) {
             try {
-                String rollNumber = data.get("rollNumber");
+                String rollNumber = data.getOrDefault("rollNumber", "").trim();
+                String username = rollNumber.toLowerCase();
 
                 // Skip if already exists
-                if (userRepository.existsByUsername(rollNumber)) {
+                if (userRepository.existsByUsername(username)) {
                     continue;
                 }
 
@@ -329,10 +328,11 @@ public class BulkUploadService {
                         new TypeReference<Map<String, String>>() {
                         });
 
-                String facultyId = data.get("facultyId");
+                String facultyId = data.getOrDefault("facultyId", "").trim();
+                String username = facultyId.toLowerCase();
 
                 // Double-check not already exists
-                if (userRepository.existsByUsername(facultyId)) {
+                if (userRepository.existsByUsername(username)) {
                     continue;
                 }
 
@@ -386,18 +386,28 @@ public class BulkUploadService {
         List<Map<String, String>> result = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String headerLine = reader.readLine();
+            String headerLine = null;
+            while ((headerLine = reader.readLine()) != null) {
+                if (headerLine.isBlank()) {
+                    continue;
+                }
+                if (headerLine.trim().startsWith("#")) {
+                    continue;
+                }
+                break;
+            }
+
             if (headerLine == null) return result;
-            String[] headers = headerLine.split(",", -1);
-            for (int i = 0; i < headers.length; i++) headers[i] = headers[i].trim();
+            List<String> headers = parseCsvLine(headerLine);
+            for (int i = 0; i < headers.size(); i++) headers.set(i, headers.get(i).trim());
 
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) continue;
-                String[] values = line.split(",", -1);
+                if (line.isBlank() || line.trim().startsWith("#")) continue;
+                List<String> values = parseCsvLine(line);
                 Map<String, String> row = new LinkedHashMap<>();
-                for (int i = 0; i < headers.length; i++) {
-                    row.put(headers[i], i < values.length ? values[i].trim() : "");
+                for (int i = 0; i < headers.size(); i++) {
+                    row.put(headers.get(i), i < values.size() ? values.get(i).trim() : "");
                 }
                 // Map CSV column names to the internal keys expected by validate methods
                 normalizeKeys(row);
@@ -405,6 +415,31 @@ public class BulkUploadService {
             }
         }
         return result;
+    }
+
+    private List<String> parseCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (c == ',' && !inQuotes) {
+                values.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        values.add(current.toString());
+        return values;
     }
 
     /** Parse XLSX — first row is header, remaining rows are data */
@@ -438,20 +473,45 @@ public class BulkUploadService {
      * that validateStudentData / validateFacultyData expect.
      */
     private void normalizeKeys(Map<String, String> row) {
-        remap(row, "fullName",        "firstName", "lastName");  // handled below
+        // Common header variants (Excel exports often use spaces / different casing)
+        remap(row, "firstName",       "First Name", "FIRST NAME", "firstname", "first_name", "givenName", "given_name");
+        remap(row, "lastName",        "Last Name", "LAST NAME", "lastname", "last_name", "surname", "familyName", "family_name");
+        remap(row, "fullName",        "Full Name", "FULL NAME", "name", "studentName", "facultyName");
+        remap(row, "rollNumber",      "Roll No", "ROLL NO", "rollNo", "roll", "roll_no", "rollnumber");
+        remap(row, "facultyId",       "Faculty ID", "FACULTY ID", "employeeId", "employeeID", "empId", "empID");
+        remap(row, "departmentCode",  "Department", "DEPARTMENT", "dept", "deptCode", "dept_code", "department", "branch");
+        remap(row, "email",           "Email", "EMAIL", "emailId", "email_id", "mail");
+        remap(row, "gender",          "Gender", "GENDER", "sex");
+        remap(row, "admissionYear",   "Admission Year", "ADMISSION YEAR", "yearOfAdmission", "year_of_admission");
+        remap(row, "joiningDate",     "Joining Date", "JOINING DATE", "dateOfJoining", "date_of_joining");
+        remap(row, "qualifications",  "Qualification", "Qualifications", "QUALIFICATIONS");
+        remap(row, "designation",     "Designation", "DESIGNATION");
+        remap(row, "employmentStatus","Employment Status", "EMPLOYMENT STATUS", "status");
+        remap(row, "role",            "Role", "ROLE");
+
         remap(row, "mobile",          "contactNumber", "phone", "mobileNumber");
         remap(row, "semester",        "currentSemester");
         remap(row, "program",         "programType");
-        // If firstName+lastName present but fullName missing, build fullName
-        if (!row.containsKey("fullName") && row.containsKey("firstName")) {
-            String fn = row.getOrDefault("firstName", "");
-            String ln = row.getOrDefault("lastName", "");
-            row.put("fullName", (fn + " " + ln).trim());
+
+        // Normalize departmentCode values like "Computer Science & Engineering (CSE)" -> "CSE"
+        if (row.containsKey("departmentCode")) {
+            row.put("departmentCode", normalizeDepartmentCode(row.get("departmentCode")));
         }
-        // If fullName present but firstName missing, split it
-        if (row.containsKey("fullName") && !row.containsKey("firstName")) {
-            String[] parts = row.get("fullName").split(" ", 2);
-            row.putIfAbsent("firstName", parts[0]);
+
+        String fullName = row.get("fullName") != null ? row.get("fullName").trim() : "";
+        String firstName = row.get("firstName") != null ? row.get("firstName").trim() : "";
+        String lastName = row.get("lastName") != null ? row.get("lastName").trim() : "";
+
+        // Build fullName if missing
+        if (fullName.isEmpty() && (!firstName.isEmpty() || !lastName.isEmpty())) {
+            row.put("fullName", (firstName + " " + lastName).trim());
+            fullName = row.get("fullName");
+        }
+
+        // Split fullName if firstName missing
+        if (!fullName.isEmpty() && firstName.isEmpty()) {
+            String[] parts = fullName.split(" ", 2);
+            row.put("firstName", parts[0]);
             row.putIfAbsent("lastName", parts.length > 1 ? parts[1] : "");
         }
     }
@@ -462,6 +522,28 @@ public class BulkUploadService {
         for (String alt : altKeys) {
             if (row.containsKey(alt)) { row.put(key, row.get(alt)); return; }
         }
+    }
+
+    private String normalizeDepartmentCode(String raw) {
+        if (raw == null) return "";
+        String v = raw.trim();
+        if (v.isEmpty()) return "";
+        // Extract code from parentheses: "X (CSE)" -> "CSE"
+        int l = v.lastIndexOf('(');
+        int r = v.lastIndexOf(')');
+        if (l >= 0 && r > l + 1) {
+            String inside = v.substring(l + 1, r).trim();
+            if (!inside.isEmpty() && inside.length() <= 16) {
+                return inside.toUpperCase();
+            }
+        }
+        // If it's like "CSE - Computer Science", take left side
+        if (v.contains("-")) {
+            String left = v.split("-", 2)[0].trim();
+            if (!left.isEmpty() && left.length() <= 16) return left.toUpperCase();
+        }
+        // Otherwise assume it's already a code
+        return v.toUpperCase();
     }
 
     // ==================== PARSING METHODS (legacy, kept for reference) ====================
@@ -575,98 +657,184 @@ public class BulkUploadService {
     // ==================== VALIDATION METHODS ====================
 
     private void validateStudentData(Map<String, String> data, int rowNumber, List<ValidationError> errors) {
-        String rollNumber = data.get("rollNumber");
-        String email = data.get("email");
-        String mobile = data.get("mobile");
-        String deptCode = data.get("departmentCode");
-        String program = data.get("program");
+        // Required fields validation
+        String firstName = data.get("firstName") != null ? data.get("firstName").trim() : "";
+        String lastName = data.get("lastName") != null ? data.get("lastName").trim() : "";
+        String rollNumber = data.get("rollNumber") != null ? data.get("rollNumber").trim() : "";
+        String email = data.get("email") != null ? data.get("email").trim() : "";
+        String deptCode = data.get("departmentCode") != null ? data.get("departmentCode").trim() : "";
+
+        // Check required fields
+        if (firstName.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "firstName", "First name is required"));
+        }
+        if (lastName.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "lastName", "Last name is required"));
+        }
+        if (rollNumber.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "rollNumber", "Roll number is required"));
+        }
+        if (email.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "email", "Email is required"));
+        }
+        if (deptCode.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "departmentCode", "Department code is required"));
+        }
+
+        // Skip further validation if required fields are missing
+        if (firstName.isEmpty() || lastName.isEmpty() || rollNumber.isEmpty() || email.isEmpty() || deptCode.isEmpty()) {
+            return;
+        }
+
+        String username = rollNumber.toLowerCase();
+        String mobile = data.get("mobile") != null ? data.get("mobile").trim() : "";
+        String program = data.get("program") != null ? data.get("program").trim() : "";
 
         // Check duplicate roll number
-        if (userRepository.existsByUsername(rollNumber)) {
+        if (userRepository.existsByUsername(username)) {
             errors.add(new ValidationError(rowNumber, "rollNumber", "Roll number already exists: " + rollNumber));
         }
 
         // Check duplicate email
-        if (!email.isEmpty() && userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmail(email)) {
             errors.add(new ValidationError(rowNumber, "email", "Email already exists: " + email));
         }
 
         // Validate email format
-        if (!email.isEmpty() && !EMAIL_PATTERN.matcher(email).matches()) {
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
             errors.add(new ValidationError(rowNumber, "email", "Invalid email format: " + email));
         }
 
-        // Validate mobile format
+        // Validate mobile format (optional field)
         if (!mobile.isEmpty() && !MOBILE_PATTERN.matcher(mobile).matches()) {
-            errors.add(
-                    new ValidationError(rowNumber, "mobile", "Invalid mobile number (must be 10 digits): " + mobile));
+            errors.add(new ValidationError(rowNumber, "mobile", "Invalid mobile number (must be 10 digits): " + mobile));
         }
 
         // Validate department exists
-        if (!deptCode.isEmpty() && !departmentRepository.existsByCode(deptCode)) {
-            errors.add(new ValidationError(rowNumber, "department", "Department not found: " + deptCode));
+        String normalizedDeptCode = normalizeDepartmentCode(deptCode);
+        if (!departmentRepository.existsByCode(normalizedDeptCode)) {
+            errors.add(new ValidationError(rowNumber, "departmentCode", "Department not found: " + deptCode));
         }
 
-        // Validate program type
+        // Validate program type (optional field)
         if (!program.isEmpty() && !program.equalsIgnoreCase("UG") && !program.equalsIgnoreCase("PG")) {
             errors.add(new ValidationError(rowNumber, "program", "Program must be UG or PG: " + program));
+        }
+
+        // Validate gender (optional field)
+        String gender = data.get("gender") != null ? data.get("gender").trim() : "";
+        if (!gender.isEmpty() && !gender.equalsIgnoreCase("MALE") && !gender.equalsIgnoreCase("FEMALE")) {
+            errors.add(new ValidationError(rowNumber, "gender", "Gender must be MALE or FEMALE: " + gender));
+        }
+
+        // Validate status (optional field)
+        String status = data.get("status") != null ? data.get("status").trim() : "";
+        if (!status.isEmpty() && !status.equalsIgnoreCase("ACTIVE") && !status.equalsIgnoreCase("INACTIVE")) {
+            errors.add(new ValidationError(rowNumber, "status", "Status must be ACTIVE or INACTIVE: " + status));
         }
     }
 
     private void validateFacultyData(Map<String, String> data, int rowNumber, List<ValidationError> errors) {
-        String facultyId = data.get("facultyId");
-        String email = data.get("email");
-        String mobile = data.get("mobile");
-        String deptCode = data.get("departmentCode");
-        String role = data.get("role");
+        // Required fields validation
+        String firstName = data.get("firstName") != null ? data.get("firstName").trim() : "";
+        String lastName = data.get("lastName") != null ? data.get("lastName").trim() : "";
+        String facultyId = data.get("facultyId") != null ? data.get("facultyId").trim() : "";
+        String email = data.get("email") != null ? data.get("email").trim() : "";
+        String deptCode = data.get("departmentCode") != null ? data.get("departmentCode").trim() : "";
+
+        // Check required fields
+        if (firstName.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "firstName", "First name is required"));
+        }
+        if (lastName.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "lastName", "Last name is required"));
+        }
+        if (facultyId.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "facultyId", "Faculty ID is required"));
+        }
+        if (email.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "email", "Email is required"));
+        }
+        if (deptCode.isEmpty()) {
+            errors.add(new ValidationError(rowNumber, "departmentCode", "Department code is required"));
+        }
+
+        // Skip further validation if required fields are missing
+        if (firstName.isEmpty() || lastName.isEmpty() || facultyId.isEmpty() || email.isEmpty() || deptCode.isEmpty()) {
+            return;
+        }
+
+        String username = facultyId.toLowerCase();
+        String mobile = data.get("mobile") != null ? data.get("mobile").trim() : "";
+        String role = data.get("role") != null ? data.get("role").trim() : "";
 
         // Check duplicate faculty ID
-        if (userRepository.existsByUsername(facultyId)) {
+        if (userRepository.existsByUsername(username)) {
             errors.add(new ValidationError(rowNumber, "facultyId", "Faculty ID already exists: " + facultyId));
         }
 
         // Check duplicate email
-        if (!email.isEmpty() && userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmail(email)) {
             errors.add(new ValidationError(rowNumber, "email", "Email already exists: " + email));
         }
 
         // Validate email format
-        if (!email.isEmpty() && !EMAIL_PATTERN.matcher(email).matches()) {
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
             errors.add(new ValidationError(rowNumber, "email", "Invalid email format: " + email));
         }
 
-        // Validate mobile format
+        // Validate mobile format (optional field)
         if (!mobile.isEmpty() && !MOBILE_PATTERN.matcher(mobile).matches()) {
-            errors.add(
-                    new ValidationError(rowNumber, "mobile", "Invalid mobile number (must be 10 digits): " + mobile));
+            errors.add(new ValidationError(rowNumber, "mobile", "Invalid mobile number (must be 10 digits): " + mobile));
         }
 
         // Validate department exists
-        if (!deptCode.isEmpty() && !departmentRepository.existsByCode(deptCode)) {
-            errors.add(new ValidationError(rowNumber, "department", "Department not found: " + deptCode));
+        String normalizedDeptCode = normalizeDepartmentCode(deptCode);
+        if (!departmentRepository.existsByCode(normalizedDeptCode)) {
+            errors.add(new ValidationError(rowNumber, "departmentCode", "Department not found: " + deptCode));
         }
 
-        // Validate role
+        // Validate role (optional field)
         if (!role.isEmpty()) {
             try {
                 Role.valueOf(role.toUpperCase());
             } catch (IllegalArgumentException e) {
-                errors.add(new ValidationError(rowNumber, "role",
-                        "Invalid role: " + role + ". Must be FACULTY, HOD, or PRINCIPAL"));
+                errors.add(new ValidationError(rowNumber, "role", "Invalid role: " + role + ". Must be FACULTY, HOD, or PRINCIPAL"));
             }
+        }
+
+        // Validate gender (optional field)
+        String gender = data.get("gender") != null ? data.get("gender").trim() : "";
+        if (!gender.isEmpty() && !gender.equalsIgnoreCase("MALE") && !gender.equalsIgnoreCase("FEMALE")) {
+            errors.add(new ValidationError(rowNumber, "gender", "Gender must be MALE or FEMALE: " + gender));
+        }
+
+        // Validate employment status (optional field)
+        String employmentStatus = data.get("employmentStatus") != null ? data.get("employmentStatus").trim() : "";
+        if (!employmentStatus.isEmpty() && !employmentStatus.equalsIgnoreCase("ACTIVE") && !employmentStatus.equalsIgnoreCase("INACTIVE")) {
+            errors.add(new ValidationError(rowNumber, "employmentStatus", "Employment status must be ACTIVE or INACTIVE: " + employmentStatus));
         }
     }
 
     // ==================== HELPER METHODS ====================
 
     private User createUserFromStudentData(Map<String, String> data) {
-        String fullName = data.get("fullName");
-        String[] nameParts = fullName.split(" ", 2);
-        String firstName = nameParts[0];
-        String lastName = nameParts.length > 1 ? nameParts[1] : "";
+        String fullName = data.get("fullName") != null ? data.get("fullName").trim() : "";
+        String firstName;
+        String lastName;
+        if (!fullName.isEmpty()) {
+            String[] nameParts = fullName.split(" ", 2);
+            firstName = nameParts[0];
+            lastName = nameParts.length > 1 ? nameParts[1] : "";
+        } else {
+            firstName = data.getOrDefault("firstName", "").trim();
+            lastName = data.getOrDefault("lastName", "").trim();
+            fullName = (firstName + " " + lastName).trim();
+        }
 
         User user = new User();
-        user.setUsername(data.get("rollNumber"));
+        String rollNumber = data.getOrDefault("rollNumber", "").trim();
+        user.setUsername(rollNumber.toLowerCase());
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setEmail(data.get("email"));
@@ -679,9 +847,8 @@ public class BulkUploadService {
         LocalDate dob = parseDateString(data.get("dob"));
         user.setDob(dob);
 
-        // Generate password
-        String rawPassword = userService.generateDefaultPassword(user);
-        user.setPassword(passwordEncoder.encode(rawPassword));
+        // Default password = roll number (same as single-add flow)
+        user.setPassword(passwordEncoder.encode(rollNumber));
 
         return user;
     }
@@ -689,8 +856,13 @@ public class BulkUploadService {
     private Student createStudentFromData(Map<String, String> data, User user) {
         Student student = new Student();
         student.setUser(user);
-        student.setRollNumber(data.get("rollNumber"));
-        student.setDepartment(data.get("departmentCode")); // Legacy field
+        String rollNumber = data.getOrDefault("rollNumber", "").trim();
+        student.setRollNumber(rollNumber);
+        String deptCode = data.getOrDefault("departmentCode", "").trim().toUpperCase();
+        student.setDepartment(deptCode); // Legacy field
+        if (!deptCode.isEmpty()) {
+            departmentRepository.findByCode(deptCode).ifPresent(student::setDepartmentEntity);
+        }
 
         // Set program
         String programStr = data.get("program");
@@ -759,13 +931,22 @@ public class BulkUploadService {
     }
 
     private User createUserFromFacultyData(Map<String, String> data) {
-        String fullName = data.get("fullName");
-        String[] nameParts = fullName.split(" ", 2);
-        String firstName = nameParts[0];
-        String lastName = nameParts.length > 1 ? nameParts[1] : "";
+        String fullName = data.get("fullName") != null ? data.get("fullName").trim() : "";
+        String firstName;
+        String lastName;
+        if (!fullName.isEmpty()) {
+            String[] nameParts = fullName.split(" ", 2);
+            firstName = nameParts[0];
+            lastName = nameParts.length > 1 ? nameParts[1] : "";
+        } else {
+            firstName = data.getOrDefault("firstName", "").trim();
+            lastName = data.getOrDefault("lastName", "").trim();
+            fullName = (firstName + " " + lastName).trim();
+        }
 
         User user = new User();
-        user.setUsername(data.get("facultyId"));
+        String facultyId = data.getOrDefault("facultyId", "").trim();
+        user.setUsername(facultyId.toLowerCase());
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setEmail(data.get("email"));
@@ -786,9 +967,8 @@ public class BulkUploadService {
         LocalDate dob = parseDateString(data.get("dob"));
         user.setDob(dob);
 
-        // Generate password
-        String rawPassword = userService.generateDefaultPassword(user);
-        user.setPassword(passwordEncoder.encode(rawPassword));
+        // Default password = facultyId (same as single-add flow)
+        user.setPassword(passwordEncoder.encode(facultyId));
 
         return user;
     }
@@ -796,8 +976,12 @@ public class BulkUploadService {
     private Faculty createFacultyFromData(Map<String, String> data, User user) {
         Faculty faculty = new Faculty();
         faculty.setUser(user);
-        faculty.setFacultyId(data.get("facultyId"));
-        faculty.setDepartment(data.get("departmentCode")); // Legacy field
+        faculty.setFacultyId(data.getOrDefault("facultyId", "").trim());
+        String deptCode = data.getOrDefault("departmentCode", "").trim().toUpperCase();
+        faculty.setDepartment(deptCode); // Legacy field
+        if (!deptCode.isEmpty()) {
+            departmentRepository.findByCode(deptCode).ifPresent(faculty::setDepartmentEntity);
+        }
         faculty.setDesignation(data.get("designation"));
         faculty.setQualifications(data.get("qualifications"));
         faculty.setEmploymentStatus(EmploymentStatus.ACTIVE);

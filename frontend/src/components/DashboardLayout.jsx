@@ -192,11 +192,11 @@ const DashboardLayout = ({
                             fontSize: '0.95rem',
                         }}
                     >
-                        {(user?.firstName || user?.username || 'U').charAt(0).toUpperCase()}
+                        {[user?.firstName, user?.lastName].filter(Boolean).map(n => n.charAt(0).toUpperCase()).join('') || (user?.sub || 'U').charAt(0).toUpperCase()}
                     </Avatar>
                     <Box sx={{ overflow: 'hidden', flex: 1 }}>
                         <Typography variant="body2" fontWeight={700} noWrap color="text.primary">
-                            {user?.firstName || user?.username}
+                            {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.sub || user?.username}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" noWrap>
                             {portalSubtitle}

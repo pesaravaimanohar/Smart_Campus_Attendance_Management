@@ -101,42 +101,83 @@ const BulkUploadModule = ({ type = 'student' }) => {
     };
 
     const handleDownloadTemplate = () => {
-        // Build CSV with correct headers per type
+        // Build CSV with comprehensive headers and multiple example rows
         const studentHeaders = [
             'firstName', 'lastName', 'email', 'contactNumber', 'gender',
-            'rollNumber', 'studentId', 'departmentCode', 'program',
-            'currentSemester', 'section', 'admissionYear', 'status'
+            'rollNumber', 'departmentCode', 'program', 'currentSemester',
+            'section', 'admissionYear', 'status'
         ];
+
+        const studentExamples = [
+            ['Ravi', 'Kumar', 'ravi.kumar@college.edu', '9876543210', 'MALE', '22B91A0501', 'CSE', 'UG', '3', 'A', '2022', 'ACTIVE'],
+            ['Priya', 'Sharma', 'priya.sharma@college.edu', '9876543211', 'FEMALE', '22B91A0502', 'ECE', 'UG', '3', 'B', '2022', 'ACTIVE'],
+            ['Amit', 'Singh', 'amit.singh@college.edu', '9876543212', 'MALE', '22B91A0503', 'MECH', 'UG', '3', 'A', '2022', 'ACTIVE'],
+            ['Sneha', 'Patel', 'sneha.patel@college.edu', '9876543213', 'FEMALE', '22B91A0504', 'CIVIL', 'UG', '3', 'C', '2022', 'ACTIVE'],
+            ['Rahul', 'Verma', 'rahul.verma@college.edu', '9876543214', 'MALE', '22B91A0505', 'CSE', 'UG', '3', 'B', '2022', 'ACTIVE']
+        ];
+
         const facultyHeaders = [
             'firstName', 'lastName', 'email', 'contactNumber', 'gender',
-            'facultyId', 'departmentCode', 'designation', 'qualifications',
+            'facultyId', 'departmentCode', 'role', 'designation', 'qualifications',
             'joiningDate', 'employmentStatus'
         ];
 
-        const studentExample = [
-            'Ravi', 'Kumar', 'ravi@college.edu', '9876543210', 'MALE',
-            '22B91A0501', '22B91A0501', 'CSE', 'B_TECH',
-            '3', 'A', '2022', 'ACTIVE'
-        ];
-        const facultyExample = [
-            'Suresh', 'Reddy', 'suresh@college.edu', '9876543211', 'MALE',
-            'FAC001', 'CSE', 'Assistant Professor', 'M.Tech',
-            '2020-06-01', 'ACTIVE'
+        const facultyExamples = [
+            ['Dr. Suresh', 'Reddy', 'suresh.reddy@college.edu', '9876543215', 'MALE', 'FAC001', 'CSE', 'FACULTY', 'Assistant Professor', 'M.Tech, Ph.D.', '2020-06-01', 'ACTIVE'],
+            ['Prof. Meera', 'Iyer', 'meera.iyer@college.edu', '9876543216', 'FEMALE', 'FAC002', 'ECE', 'FACULTY', 'Associate Professor', 'M.E., Ph.D.', '2018-07-15', 'ACTIVE'],
+            ['Dr. Rajesh', 'Gupta', 'rajesh.gupta@college.edu', '9876543217', 'MALE', 'FAC003', 'MECH', 'HOD', 'Professor', 'B.E., M.Tech, Ph.D.', '2015-01-10', 'ACTIVE'],
+            ['Ms. Kavita', 'Sharma', 'kavita.sharma@college.edu', '9876543218', 'FEMALE', 'FAC004', 'CIVIL', 'FACULTY', 'Lecturer', 'B.Tech, M.Tech', '2021-08-20', 'ACTIVE'],
+            ['Dr. Vikram', 'Singh', 'vikram.singh@college.edu', '9876543219', 'MALE', 'FAC005', 'CSE', 'PRINCIPAL', 'Principal', 'B.Tech, M.Tech, Ph.D.', '2010-06-01', 'ACTIVE']
         ];
 
         const headers = type === 'student' ? studentHeaders : facultyHeaders;
-        const example = type === 'student' ? studentExample : facultyExample;
+        const examples = type === 'student' ? studentExamples : facultyExamples;
 
-        const csvContent = [
-            headers.join(','),
-            example.join(','),
-        ].join('\n');
+        // Create CSV content with headers and examples
+        let csvContent = headers.join(',') + '\n';
+        examples.forEach(example => {
+            csvContent += example.map(field => `"${field}"`).join(',') + '\n';
+        });
+
+        // Add instructions as comments at the top
+        const instructions = type === 'student'
+            ? `# Student Bulk Upload Template
+# Instructions:
+# 1. Do not modify the header row
+# 2. Fill in one row per student
+# 3. Required fields: firstName, lastName, email, rollNumber, departmentCode
+# 4. Email must be unique and valid
+# 5. Roll number must be unique
+# 6. Department code must exist in the system (e.g., CSE, ECE, MECH, CIVIL)
+# 7. Gender: MALE or FEMALE
+# 8. Program: UG or PG
+# 9. Current semester: 1-8 for UG, 1-4 for PG
+# 10. Section: A, B, C, etc.
+# 11. Status: ACTIVE or INACTIVE
+#
+`
+            : `# Faculty Bulk Upload Template
+# Instructions:
+# 1. Do not modify the header row
+# 2. Fill in one row per faculty member
+# 3. Required fields: firstName, lastName, email, facultyId, departmentCode
+# 4. Email must be unique and valid
+# 5. Faculty ID must be unique
+# 6. Department code must exist in the system (e.g., CSE, ECE, MECH, CIVIL)
+# 7. Role: FACULTY, HOD, or PRINCIPAL
+# 8. Gender: MALE or FEMALE
+# 9. Employment Status: ACTIVE or INACTIVE
+# 10. Date format for joiningDate: YYYY-MM-DD
+#
+`;
+
+        csvContent = instructions + csvContent;
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${type}_upload_template.csv`;
+        a.download = `${type}_bulk_upload_template.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -152,35 +193,49 @@ const BulkUploadModule = ({ type = 'student' }) => {
 
     const renderUploadTab = () => (
         <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="h5" gutterBottom fontWeight={600}>
-                Upload {type === 'student' ? 'Student' : 'Faculty'} Data
+            <Typography variant="h5" gutterBottom fontWeight={600} color="primary">
+                Bulk Upload {type === 'student' ? 'Students' : 'Faculty'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-                Download the template, fill in the data, and upload the Excel file
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                Upload multiple {type === 'student' ? 'students' : 'faculty members'} at once using a CSV or Excel file
             </Typography>
+
+            <Alert severity="info" sx={{ mb: 4, textAlign: 'left' }}>
+                <AlertTitle>How to use bulk upload:</AlertTitle>
+                <Typography variant="body2" component="div">
+                    <ol style={{ margin: 0, paddingLeft: '20px' }}>
+                        <li>Download the template file below</li>
+                        <li>Fill in the data following the format and instructions in the template</li>
+                        <li>Save as CSV or Excel (.xlsx) format</li>
+                        <li>Upload the file and validate before confirming</li>
+                    </ol>
+                </Typography>
+            </Alert>
 
             <Button
                 variant="outlined"
                 startIcon={<DownloadIcon />}
                 onClick={handleDownloadTemplate}
-                sx={{ mb: 4 }}
+                sx={{ mb: 4, px: 4, py: 1.5 }}
+                size="large"
             >
-                Download Excel Template
+                Download {type === 'student' ? 'Student' : 'Faculty'} Template
             </Button>
 
             <Box
                 sx={{
                     border: '2px dashed',
-                    borderColor: 'divider',
-                    borderRadius: 2,
+                    borderColor: file ? 'success.main' : 'divider',
+                    borderRadius: 3,
                     p: 6,
                     mb: 3,
-                    bgcolor: 'background.default',
+                    bgcolor: file ? 'success.light' : 'background.default',
                     cursor: 'pointer',
-                    transition: 'all 0.3s',
+                    transition: 'all 0.3s ease',
                     '&:hover': {
                         borderColor: 'primary.main',
                         bgcolor: 'action.hover',
+                        transform: 'scale(1.02)',
                     },
                 }}
                 onClick={() => document.getElementById('file-upload').click()}
@@ -192,13 +247,27 @@ const BulkUploadModule = ({ type = 'student' }) => {
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
                 />
-                <UploadIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                    {file ? file.name : 'Click to browse or drag and drop'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                    Excel (.xlsx) or CSV (.csv) files accepted
-                </Typography>
+                {file ? (
+                    <>
+                        <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
+                        <Typography variant="h6" gutterBottom color="success.main">
+                            File Selected: {file.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Click to change file or proceed to validate
+                        </Typography>
+                    </>
+                ) : (
+                    <>
+                        <UploadIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                        <Typography variant="h6" gutterBottom>
+                            Click to browse or drag and drop
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            CSV or Excel (.xlsx) files accepted • Max 10MB
+                        </Typography>
+                    </>
+                )}
             </Box>
 
             {file && (
@@ -207,9 +276,17 @@ const BulkUploadModule = ({ type = 'student' }) => {
                     size="large"
                     onClick={handleValidate}
                     disabled={isValidating}
-                    sx={{ minWidth: 200 }}
+                    sx={{ minWidth: 200, py: 1.5 }}
+                    startIcon={isValidating ? null : <CheckCircleIcon />}
                 >
-                    {isValidating ? 'Validating...' : 'Validate Upload'}
+                    {isValidating ? (
+                        <>
+                            <LinearProgress sx={{ width: '100%', mr: 2 }} />
+                            Validating...
+                        </>
+                    ) : (
+                        'Validate Upload'
+                    )}
                 </Button>
             )}
         </Box>
@@ -218,31 +295,65 @@ const BulkUploadModule = ({ type = 'student' }) => {
     const renderPreviewTab = () => {
         if (!validationResult) return null;
 
-        const { validRecords, errors, totalProcessed } = validationResult;
+        // Backend returns: { totalRecords, validRecords, invalidRecords, validData, errors, uploadLogId }
+        const rawValidRecords = validationResult.validData || validationResult.validRecords || [];
+        const validRecords = rawValidRecords.map((record) => (record?.data ? record.data : record));
+        const errors = validationResult.errors || [];
+        const totalProcessed = validationResult.totalRecords ?? validationResult.totalProcessed ?? 0;
         const hasErrors = errors && errors.length > 0;
+        const successRate = totalProcessed > 0 ? Math.round((validRecords.length / totalProcessed) * 100) : 0;
+        const previewFields = validRecords[0] ? Object.keys(validRecords[0]).slice(0, 6) : [];
 
         return (
             <Box sx={{ p: 3 }}>
+                {/* Summary Header */}
+                <Box sx={{ mb: 3, textAlign: 'center' }}>
+                    <Typography variant="h5" gutterBottom fontWeight={600}>
+                        Upload Validation Results
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Processed {totalProcessed} records • {successRate}% success rate
+                    </Typography>
+                </Box>
+
                 {/* Summary Cards */}
-                <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-                    <Card sx={{ flex: 1, bgcolor: 'success.light', color: 'success.contrastText' }}>
-                        <CardContent>
+                <Stack direction="row" spacing={2} sx={{ mb: 3 }} justifyContent="center">
+                    <Card sx={{
+                        flex: 1,
+                        bgcolor: 'success.light',
+                        color: 'success.contrastText',
+                        maxWidth: 200
+                    }}>
+                        <CardContent sx={{ textAlign: 'center' }}>
+                            <CheckCircleIcon sx={{ fontSize: 40, mb: 1 }} />
                             <Typography variant="h4" fontWeight="bold">
                                 {validRecords?.length || 0}
                             </Typography>
                             <Typography variant="body2">Valid Records</Typography>
                         </CardContent>
                     </Card>
-                    <Card sx={{ flex: 1, bgcolor: 'error.light', color: 'error.contrastText' }}>
-                        <CardContent>
+                    <Card sx={{
+                        flex: 1,
+                        bgcolor: hasErrors ? 'error.light' : 'grey.300',
+                        color: hasErrors ? 'error.contrastText' : 'grey.700',
+                        maxWidth: 200
+                    }}>
+                        <CardContent sx={{ textAlign: 'center' }}>
+                            <ErrorIcon sx={{ fontSize: 40, mb: 1 }} />
                             <Typography variant="h4" fontWeight="bold">
                                 {errors?.length || 0}
                             </Typography>
                             <Typography variant="body2">Errors Found</Typography>
                         </CardContent>
                     </Card>
-                    <Card sx={{ flex: 1, bgcolor: 'primary.light', color: 'primary.contrastText' }}>
-                        <CardContent>
+                    <Card sx={{
+                        flex: 1,
+                        bgcolor: 'info.light',
+                        color: 'info.contrastText',
+                        maxWidth: 200
+                    }}>
+                        <CardContent sx={{ textAlign: 'center' }}>
+                            <UploadIcon sx={{ fontSize: 40, mb: 1 }} />
                             <Typography variant="h4" fontWeight="bold">
                                 {totalProcessed || 0}
                             </Typography>
@@ -274,7 +385,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                                             <TableCell>
                                                 <Chip label={error.field} size="small" color="error" variant="outlined" />
                                             </TableCell>
-                                            <TableCell>{error.message}</TableCell>
+                                            <TableCell>{error.errorMessage || error.message || 'Unknown error'}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -294,7 +405,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                             <Table size="small" stickyHeader>
                                 <TableHead>
                                     <TableRow>
-                                        {Object.keys(validRecords[0] || {}).slice(0, 6).map((key) => (
+                                        {previewFields.map((key) => (
                                             <TableCell key={key}><strong>{key}</strong></TableCell>
                                         ))}
                                     </TableRow>
@@ -302,8 +413,8 @@ const BulkUploadModule = ({ type = 'student' }) => {
                                 <TableBody>
                                     {validRecords.slice(0, 10).map((record, index) => (
                                         <TableRow key={index}>
-                                            {Object.values(record).slice(0, 6).map((value, i) => (
-                                                <TableCell key={i}>{String(value)}</TableCell>
+                                            {previewFields.map((key, i) => (
+                                                <TableCell key={i}>{String(record[key] ?? '')}</TableCell>
                                             ))}
                                         </TableRow>
                                     ))}
@@ -375,7 +486,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                 <DialogTitle>Confirm Import</DialogTitle>
                 <DialogContent>
                     <Typography>
-                        Are you sure you want to import {validationResult?.validRecords?.length || 0} record(s)?
+                        Are you sure you want to import {(validationResult?.validData?.length || validationResult?.validRecords?.length || 0)} record(s)?
                         This action cannot be undone.
                     </Typography>
                 </DialogContent>

@@ -7,8 +7,10 @@ import com.college.smartattendance.entity.User;
 import com.college.smartattendance.repository.StudentRepository;
 import com.college.smartattendance.repository.UserRepository;
 import com.college.smartattendance.service.AttendanceService;
+import com.college.smartattendance.service.ClassCurriculumService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,6 +30,9 @@ public class StudentController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private ClassCurriculumService classCurriculumService;
+
     private Student getAuthenticatedStudent(Authentication authentication) {
         String username = authentication.getName();
         User user = userRepository.findByUsername(username).orElseThrow();
@@ -35,6 +40,7 @@ public class StudentController {
     }
 
     @PostMapping("/mark-attendance")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<AttendanceRecord> markAttendance(
             Authentication authentication,
             @RequestParam("sessionId") Long sessionId,
@@ -58,6 +64,7 @@ public class StudentController {
     }
 
     @PostMapping("/qr-attendance")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<?> markQrAttendance(
             Authentication authentication,
             @RequestBody QrAttendanceRequest request) {
@@ -97,6 +104,7 @@ public class StudentController {
     }
 
     @GetMapping("/session-info")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<?> getSessionInfo(
             @RequestParam("qrToken") String qrToken) {
         try {
@@ -110,6 +118,7 @@ public class StudentController {
     }
 
     @GetMapping("/analytics")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<com.college.smartattendance.dto.StudentAnalyticsDto> getAnalytics(
             Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
@@ -117,12 +126,14 @@ public class StudentController {
     }
 
     @GetMapping("/subjects")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<?> getStudentSubjects(Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
         return ResponseEntity.ok(attendanceService.getStudentSubjects(student.getId()));
     }
 
     @GetMapping("/subject-attendance/{subjectId}")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<com.college.smartattendance.dto.SubjectAttendanceDto> getSubjectAttendance(
             Authentication authentication,
             @PathVariable Long subjectId) {
@@ -131,6 +142,7 @@ public class StudentController {
     }
 
     @GetMapping("/attendance-status")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<com.college.smartattendance.dto.AttendanceStatusDto> getAttendanceStatus(
             Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
@@ -138,6 +150,7 @@ public class StudentController {
     }
 
     @GetMapping("/today-sessions")
+    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<List<com.college.smartattendance.dto.TodaySessionDto>> getTodaySessions(
             Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
@@ -156,6 +169,16 @@ public class StudentController {
     public ResponseEntity<List<String>> getAlerts(Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
         return ResponseEntity.ok(attendanceService.getStudentAlerts(student.getId()));
+    }
+
+    @GetMapping("/class-curriculum")
+    public ResponseEntity<?> getClassCurriculum(Authentication authentication) {
+        Student student = getAuthenticatedStudent(authentication);
+        return classCurriculumService.findBestMatchForStudent(student)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.ok(Map.of(
+                        "message", "No timetable or syllabus has been published for your class yet.",
+                        "empty", true)));
     }
 }
 

@@ -14,15 +14,15 @@ const GreetingWidget = () => {
         return 'Good evening';
     };
 
-    // Get first name
-    const getFirstName = () => {
-        if (user?.firstName) return user.firstName;
-        if (user?.name) {
-            const parts = user.name.split(' ');
-            return parts[0];
-        }
+    // Get display name from JWT decoded data
+    const getDisplayName = () => {
+        // Combine firstName and lastName from JWT claims
+        const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+        if (fullName) return fullName;
+        if (user?.name) return user.name;
+        if (user?.sub) return user.sub;
         if (user?.username) return user.username;
-        return 'Student';
+        return 'there';
     };
 
     return (
@@ -34,11 +34,10 @@ const GreetingWidget = () => {
                 border: '1px solid',
                 borderColor: 'divider',
                 bgcolor: alpha('#6366f1', 0.03),
-                mb: 3
             }}
         >
             <Typography variant="h5" fontWeight={700} gutterBottom>
-                {getGreeting()}, {getFirstName()} 👋
+                {getGreeting()}, {getDisplayName()} 👋
             </Typography>
             <Typography variant="body2" color="text.secondary">
                 Here's a quick look at your attendance and today's schedule.

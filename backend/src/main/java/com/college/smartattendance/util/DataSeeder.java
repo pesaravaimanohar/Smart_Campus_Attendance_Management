@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
@@ -26,6 +27,9 @@ public class DataSeeder implements CommandLineRunner {
     private final FacultySubjectMapRepository facultySubjectMapRepository;
     private final StudentClassMapRepository studentClassMapRepository;
     private final DepartmentRepository departmentRepository;
+    private final ProgramRepository programRepository;
+    private final AttendanceSessionRepository attendanceSessionRepository;
+    private final AttendanceRecordRepository attendanceRecordRepository;
     private final PasswordEncoder passwordEncoder;
 
     private final Set<String> credentialLines = new LinkedHashSet<>();
@@ -40,6 +44,9 @@ public class DataSeeder implements CommandLineRunner {
             FacultySubjectMapRepository facultySubjectMapRepository,
             StudentClassMapRepository studentClassMapRepository,
             DepartmentRepository departmentRepository,
+            ProgramRepository programRepository,
+            AttendanceSessionRepository attendanceSessionRepository,
+            AttendanceRecordRepository attendanceRecordRepository,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.academicYearRepository = academicYearRepository;
@@ -50,25 +57,37 @@ public class DataSeeder implements CommandLineRunner {
         this.facultySubjectMapRepository = facultySubjectMapRepository;
         this.studentClassMapRepository = studentClassMapRepository;
         this.departmentRepository = departmentRepository;
+        this.programRepository = programRepository;
+        this.attendanceSessionRepository = attendanceSessionRepository;
+        this.attendanceRecordRepository = attendanceRecordRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     public void run(String... args) {
-        AcademicYear activeYear = ensureAcademicYear("2025-2026");
-        ensureLeadershipAccounts();
-        Map<String, Department> departments = ensureDepartments();
-        Map<String, CourseClass> classes = ensureClasses(departments);
-        Map<String, Subject> subjects = ensureSubjects(departments);
-        Map<String, Faculty> faculties = ensureFaculties(departments);
-        ensureAssignments(faculties, classes, subjects, activeYear);
-        ensureStudents(departments, classes, activeYear);
-        writeCredentials();
+        System.out.println("============== DATA SEEDER RUNNING ============");
+        try {
+            AcademicYear activeYear = ensureAcademicYear("2025-2026");
+            ensureLeadershipAccounts();
+            Map<String, Department> departments = ensureDepartments();
+            Map<String, Program> programs = ensurePrograms(departments);
+            Map<String, CourseClass> classes = ensureClasses(departments);
+            Map<String, Subject> subjects = ensureSubjects(departments);
+            Map<String, Faculty> faculties = ensureFaculties(departments);
+            ensureAssignments(faculties, classes, subjects, activeYear);
+            ensureStudents(departments, classes, activeYear, programs);
+            ensureAttendanceData(activeYear);
+            writeCredentials();
+            System.out.println("============== DATA SEEDER COMPLETED ============");
+        } catch (Exception e) {
+            System.err.println("============== DATA SEEDER FAILED ============");
+            e.printStackTrace();
+        }
     }
 
     private void ensureLeadershipAccounts() {
-        ensureUser("admin", "admin123", Role.ADMIN, "System", "Admin", "admin@smartattendance.local");
-        ensureUser("PRN001", "principal123", Role.PRINCIPAL, "Priya", "Reddy", "principal@jntua.local");
+        ensureUser("admin", "admin123", Role.ADMIN, "System", "Admin", "admin@jntua.in", "9848011111");
+        ensureUser("PRN001", "principal123", Role.PRINCIPAL, "P.", "Chenna Reddy Rao", "principal@jntua.in", "9848011112");
     }
 
     private AcademicYear ensureAcademicYear(String name) {
@@ -84,39 +103,12 @@ public class DataSeeder implements CommandLineRunner {
     private Map<String, Department> ensureDepartments() {
         Map<String, String> deptNames = new LinkedHashMap<>();
         deptNames.put("CSE", "Computer Science & Engineering");
-        deptNames.put("CSEAI", "Computer Science & Engineering (AI & ML)");
-        deptNames.put("CSEDS", "Computer Science & Engineering (Data Science)");
-        deptNames.put("CSECS", "Computer Science & Engineering (Cyber Security)");
-        deptNames.put("IT", "Information Technology");
         deptNames.put("ECE", "Electronics & Communication Engineering");
         deptNames.put("EEE", "Electrical & Electronics Engineering");
-        deptNames.put("EIE", "Electronics & Instrumentation Engineering");
         deptNames.put("MECH", "Mechanical Engineering");
-        deptNames.put("AUTO", "Automobile Engineering");
         deptNames.put("CIVIL", "Civil Engineering");
-        deptNames.put("CHEM", "Chemical Engineering");
-        deptNames.put("BIOTECH", "Biotechnology Engineering");
-        deptNames.put("MET", "Metallurgical & Materials Engineering");
-        deptNames.put("MINING", "Mining Engineering");
-        deptNames.put("FOOD", "Food Technology");
-        deptNames.put("PETRO", "Petroleum Technology");
-        deptNames.put("MBA", "Master of Business Administration");
-        deptNames.put("MCA", "Master of Computer Applications");
-        deptNames.put("MTCSE", "M.Tech Computer Science & Engineering");
-        deptNames.put("MTAI", "M.Tech Artificial Intelligence & Machine Learning");
-        deptNames.put("MTDS", "M.Tech Data Science");
-        deptNames.put("MTCYB", "M.Tech Cyber Security");
-        deptNames.put("MTECE", "M.Tech Electronics & Communication Engineering");
-        deptNames.put("MTVLSI", "M.Tech VLSI Design");
-        deptNames.put("MTEMB", "M.Tech Embedded Systems");
-        deptNames.put("MTPWR", "M.Tech Power Systems");
-        deptNames.put("MTMECH", "M.Tech Mechanical Engineering");
-        deptNames.put("MTTHERM", "M.Tech Thermal Engineering");
-        deptNames.put("MTMDES", "M.Tech Machine Design");
-        deptNames.put("MTCIVL", "M.Tech Structural Engineering");
-        deptNames.put("MTTRAN", "M.Tech Transportation Engineering");
-        deptNames.put("MTENV", "M.Tech Environmental Engineering");
-        deptNames.put("MTCHEM", "M.Tech Chemical Engineering");
+        deptNames.put("IT", "Information Technology");
+        
         Map<String, Department> result = new LinkedHashMap<>();
         deptNames.forEach((code, desc) -> {
             Department dept = departmentRepository.findByCode(code)
@@ -129,47 +121,58 @@ public class DataSeeder implements CommandLineRunner {
         });
         return result;
     }
+    
+    private Map<String, Program> ensurePrograms(Map<String, Department> departments) {
+        Map<String, Program> result = new LinkedHashMap<>();
+        
+        for (Department dept : departments.values()) {
+            Program ug = programRepository.findAll().stream()
+                    .filter(p -> p.getName().equals("B.Tech " + dept.getCode()))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        Program p = new Program("B.Tech " + dept.getCode(), ProgramType.UG, 4, 8);
+                        p.setDepartment(dept);
+                        return programRepository.save(p);
+                    });
+            result.put(dept.getCode() + "_UG", ug);
+            
+            Program pg = programRepository.findAll().stream()
+                    .filter(p -> p.getName().equals("M.Tech " + dept.getCode()))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        Program p = new Program("M.Tech " + dept.getCode(), ProgramType.PG, 2, 4);
+                        p.setDepartment(dept);
+                        return programRepository.save(p);
+                    });
+            result.put(dept.getCode() + "_PG", pg);
+        }
+        return result;
+    }
 
     private Map<String, CourseClass> ensureClasses(Map<String, Department> departments) {
-        List<CourseClassSpec> specs = List.of(
-                new CourseClassSpec("CSE-UG-4", "IV B.Tech CSE-A", "CSE", 4),
-                new CourseClassSpec("CSEAI-UG-3", "III B.Tech CSE(AI)-A", "CSEAI", 3),
-                new CourseClassSpec("CSEDS-UG-3", "III B.Tech CSE(DS)-A", "CSEDS", 3),
-                new CourseClassSpec("CSECS-UG-3", "III B.Tech CSE(CS)-A", "CSECS", 3),
-                new CourseClassSpec("ECE-UG-3", "III B.Tech ECE-A", "ECE", 3),
-                new CourseClassSpec("EEE-UG-2", "II B.Tech EEE-A", "EEE", 2),
-                new CourseClassSpec("EIE-UG-2", "II B.Tech EIE-A", "EIE", 2),
-                new CourseClassSpec("MECH-UG-2", "II B.Tech MECH-A", "MECH", 2),
-                new CourseClassSpec("AUTO-UG-2", "II B.Tech AUTO-A", "AUTO", 2),
-                new CourseClassSpec("CIVIL-UG-3", "III B.Tech CIVIL-A", "CIVIL", 3),
-                new CourseClassSpec("CHEM-UG-1", "I B.Tech CHEM-A", "CHEM", 1),
-                new CourseClassSpec("IT-UG-2", "II B.Tech IT-A", "IT", 2),
-                new CourseClassSpec("BIOTECH-UG-1", "I B.Tech BIOTECH-A", "BIOTECH", 1),
-                new CourseClassSpec("MET-UG-3", "III B.Tech MET-A", "MET", 3),
-                new CourseClassSpec("MINING-UG-3", "III B.Tech MINING-A", "MINING", 3),
-                new CourseClassSpec("FOOD-UG-2", "II B.Tech FOOD-A", "FOOD", 2),
-                new CourseClassSpec("PETRO-UG-2", "II B.Tech PETRO-A", "PETRO", 2),
-                new CourseClassSpec("MTCSE-PG-1", "I M.Tech CSE", "MTCSE", 1),
-                new CourseClassSpec("MTAI-PG-1", "I M.Tech AI & ML", "MTAI", 1),
-                new CourseClassSpec("MTDS-PG-1", "I M.Tech Data Science", "MTDS", 1),
-                new CourseClassSpec("MTCYB-PG-1", "I M.Tech Cyber Security", "MTCYB", 1),
-                new CourseClassSpec("MTECE-PG-1", "I M.Tech ECE", "MTECE", 1),
-                new CourseClassSpec("MTVLSI-PG-1", "I M.Tech VLSI", "MTVLSI", 1),
-                new CourseClassSpec("MTEMB-PG-1", "I M.Tech Embedded", "MTEMB", 1),
-                new CourseClassSpec("MTPWR-PG-1", "I M.Tech Power Systems", "MTPWR", 1),
-                new CourseClassSpec("MTMECH-PG-1", "I M.Tech MECH", "MTMECH", 1),
-                new CourseClassSpec("MTTHERM-PG-1", "I M.Tech Thermal", "MTTHERM", 1),
-                new CourseClassSpec("MTMDES-PG-1", "I M.Tech Machine Design", "MTMDES", 1),
-                new CourseClassSpec("MTCIVL-PG-1", "I M.Tech CIVIL", "MTCIVL", 1),
-                new CourseClassSpec("MTTRAN-PG-1", "I M.Tech Transportation", "MTTRAN", 1),
-                new CourseClassSpec("MTENV-PG-1", "I M.Tech Environmental", "MTENV", 1),
-                new CourseClassSpec("MTCHEM-PG-1", "I M.Tech CHEM", "MTCHEM", 1),
-                new CourseClassSpec("MBA-PG-1", "I MBA", "MBA", 1),
-                new CourseClassSpec("MCA-PG-1", "I MCA", "MCA", 1)
-        );
+        List<CourseClassSpec> specs = new ArrayList<>();
+        String[] depts = {"CSE", "ECE", "EEE", "CIVIL", "MECH", "IT"};
+        
+        for (String dept : depts) {
+            for (int year = 1; year <= 4; year++) {
+                specs.add(new CourseClassSpec(dept + "-UG-" + year + "A", yearString(year) + " B.Tech " + dept + "-A", dept, year));
+                specs.add(new CourseClassSpec(dept + "-UG-" + year + "B", yearString(year) + " B.Tech " + dept + "-B", dept, year));
+            }
+        }
+
         Map<String, CourseClass> result = new LinkedHashMap<>();
         specs.forEach(spec -> result.put(spec.key, ensureClass(spec.name, spec.departmentCode, spec.yearLevel)));
         return result;
+    }
+    
+    private String yearString(int year) {
+        switch(year) {
+            case 1: return "I";
+            case 2: return "II";
+            case 3: return "III";
+            case 4: return "IV";
+            default: return "";
+        }
     }
 
     private CourseClass ensureClass(String name, String department, int yearLevel) {
@@ -187,56 +190,19 @@ public class DataSeeder implements CommandLineRunner {
 
     private Map<String, Subject> ensureSubjects(Map<String, Department> departments) {
         List<SubjectSpec> subjects = List.of(
-                new SubjectSpec("Python Programming", "CSE101", "CSE"),
-                new SubjectSpec("Data Structures & Algorithms", "CSE102", "CSE"),
-                new SubjectSpec("Artificial Intelligence", "CSEAI201", "CSEAI"),
-                new SubjectSpec("Data Science Foundations", "CSEDS201", "CSEDS"),
-                new SubjectSpec("Network Security", "CSECS201", "CSECS"),
-                new SubjectSpec("Embedded Systems", "ECE101", "ECE"),
-                new SubjectSpec("Digital Signal Processing", "ECE102", "ECE"),
-                new SubjectSpec("Power Systems", "EEE101", "EEE"),
-                new SubjectSpec("Control Systems", "EEE102", "EEE"),
-                new SubjectSpec("Microcontrollers & Sensors", "EIE201", "EIE"),
-                new SubjectSpec("Mechanics of Materials", "MECH101", "MECH"),
-                new SubjectSpec("Thermodynamics", "MECH102", "MECH"),
-                new SubjectSpec("Automotive Systems", "AUTO201", "AUTO"),
-                new SubjectSpec("Structural Concrete Design", "CIVIL101", "CIVIL"),
-                new SubjectSpec("Surveying", "CIVIL102", "CIVIL"),
-                new SubjectSpec("Process Calculations", "CHEM101", "CHEM"),
-                new SubjectSpec("Chemical Reaction Engineering", "CHEM102", "CHEM"),
-                new SubjectSpec("Food Processing", "FOOD201", "FOOD"),
-                new SubjectSpec("Petroleum Geology", "PETRO201", "PETRO"),
-                new SubjectSpec("Database Systems", "IT101", "IT"),
-                new SubjectSpec("Software Engineering", "IT102", "IT"),
-                new SubjectSpec("Instrumentation Engineering", "EIE101", "EIE"),
-                new SubjectSpec("Sensors and Transducers", "EIE102", "EIE"),
-                new SubjectSpec("Bioprocess Engineering", "BIOTECH101", "BIOTECH"),
-                new SubjectSpec("Genetics and Cell Biology", "BIOTECH102", "BIOTECH"),
-                new SubjectSpec("Metallurgical Thermodynamics", "MET101", "MET"),
-                new SubjectSpec("Manufacturing Technology", "MET102", "MET"),
-                new SubjectSpec("Mine Environmental Engineering", "MINING101", "MINING"),
-                new SubjectSpec("Rock Mechanics", "MINING102", "MINING"),
-                new SubjectSpec("Business Strategy", "MBA101", "MBA"),
-                new SubjectSpec("Organizational Behavior", "MBA102", "MBA"),
-                new SubjectSpec("Advanced Algorithms", "MCA201", "MCA"),
-                new SubjectSpec("Computer Networks", "MCA202", "MCA"),
-                new SubjectSpec("Machine Learning for Engineers", "MTCSE401", "MTCSE"),
-                new SubjectSpec("Cybersecurity in Distributed Systems", "MTCSE402", "MTCSE"),
-                new SubjectSpec("Deep Learning", "MTAI401", "MTAI"),
-                new SubjectSpec("Big Data Systems", "MTDS401", "MTDS"),
-                new SubjectSpec("Advanced Cyber Security", "MTCYB401", "MTCYB"),
-                new SubjectSpec("VLSI Design", "MTECE401", "MTECE"),
-                new SubjectSpec("Advanced Communication Systems", "MTECE402", "MTECE"),
-                new SubjectSpec("VLSI Architectures", "MTVLSI401", "MTVLSI"),
-                new SubjectSpec("Embedded Real-Time Systems", "MTEMB401", "MTEMB"),
-                new SubjectSpec("Power System Protection", "MTPWR401", "MTPWR"),
-                new SubjectSpec("Advanced Thermal Engineering", "MTMECH401", "MTMECH"),
-                new SubjectSpec("Thermal Systems Design", "MTTHERM401", "MTTHERM"),
-                new SubjectSpec("Machine Design", "MTMDES401", "MTMDES"),
-                new SubjectSpec("Finite Element Methods", "MTCIVL401", "MTCIVL"),
-                new SubjectSpec("Transportation Planning", "MTTRAN401", "MTTRAN"),
-                new SubjectSpec("Environmental Impact Assessment", "MTENV401", "MTENV"),
-                new SubjectSpec("Advanced Separation Processes", "MTCHEM401", "MTCHEM")
+                new SubjectSpec("Data Structures and Algorithms", "CSE101", "CSE"),
+                new SubjectSpec("Operating Systems", "CSE102", "CSE"),
+                new SubjectSpec("Database Management", "CSE103", "CSE"),
+                new SubjectSpec("Signals and Systems", "ECE101", "ECE"),
+                new SubjectSpec("Digital Electronics", "ECE102", "ECE"),
+                new SubjectSpec("Electrical Machines", "EEE101", "EEE"),
+                new SubjectSpec("Power Systems", "EEE102", "EEE"),
+                new SubjectSpec("Thermodynamics", "MECH101", "MECH"),
+                new SubjectSpec("Fluid Mechanics", "MECH102", "MECH"),
+                new SubjectSpec("Structural Analysis", "CIVIL101", "CIVIL"),
+                new SubjectSpec("Concrete Technology", "CIVIL102", "CIVIL"),
+                new SubjectSpec("Web Technologies", "IT101", "IT"),
+                new SubjectSpec("Computer Networks", "IT102", "IT")
         );
         Map<String, Subject> result = new LinkedHashMap<>();
         subjects.forEach(spec -> result.put(spec.code, ensureSubject(spec)));
@@ -255,27 +221,38 @@ public class DataSeeder implements CommandLineRunner {
 
     private Map<String, Faculty> ensureFaculties(Map<String, Department> departments) {
         List<FacultySpec> specs = List.of(
-                new FacultySpec("HOD001", "hod123", Role.HOD, "Haritha", "Reddy", "hod.cse@jntua.local", "CSE", "Head of Department"),
-                new FacultySpec("FAC_CSE01", "faculty123", Role.FACULTY, "Ravi", "Kumar", "ravi.kumar@jntua.local", "CSE", "Associate Professor"),
-                new FacultySpec("FAC_CSEAI01", "faculty123", Role.FACULTY, "Harini", "Dev", "harini.dev@jntua.local", "CSEAI", "Assistant Professor"),
-                new FacultySpec("FAC_CSEDS01", "faculty123", Role.FACULTY, "Roshan", "Iyer", "roshan.iyer@jntua.local", "CSEDS", "Assistant Professor"),
-                new FacultySpec("FAC_CSECS01", "faculty123", Role.FACULTY, "Salim", "Khan", "salim.khan@jntua.local", "CSECS", "Assistant Professor"),
-                new FacultySpec("FAC_ECE01", "faculty123", Role.FACULTY, "Sneha", "Varma", "sneha.varma@jntua.local", "ECE", "Associate Professor"),
-                new FacultySpec("FAC_EEE01", "faculty123", Role.FACULTY, "Aditya", "Kumar", "aditya.kumar@jntua.local", "EEE", "Assistant Professor"),
-                new FacultySpec("FAC_MECH01", "faculty123", Role.FACULTY, "Nithya", "Balaji", "nithya.balaji@jntua.local", "MECH", "Assistant Professor"),
-                new FacultySpec("FAC_AUTO01", "faculty123", Role.FACULTY, "Mahesh", "Rao", "mahesh.rao@jntua.local", "AUTO", "Assistant Professor"),
-                new FacultySpec("FAC_CIVIL01", "faculty123", Role.FACULTY, "Kavya", "Sharma", "kavya.sharma@jntua.local", "CIVIL", "Assistant Professor"),
-                new FacultySpec("FAC_CHEM01", "faculty123", Role.FACULTY, "Siam", "Gowda", "siam@jntua.local", "CHEM", "Assistant Professor"),
-                new FacultySpec("FAC_IT01", "faculty123", Role.FACULTY, "Teja", "Reddy", "teja.reddy@jntua.local", "IT", "Assistant Professor"),
-                new FacultySpec("FAC_EIE01", "faculty123", Role.FACULTY, "Vijay", "Das", "vijay.das@jntua.local", "EIE", "Associate Professor"),
-                new FacultySpec("FAC_BIO01", "faculty123", Role.FACULTY, "Meera", "Nair", "meera.nair@jntua.local", "BIOTECH", "Assistant Professor"),
-                new FacultySpec("FAC_MET01", "faculty123", Role.FACULTY, "Suresh", "Kumar", "suresh.kumar@jntua.local", "MET", "Assistant Professor"),
-                new FacultySpec("FAC_MINING01", "faculty123", Role.FACULTY, "Shalini", "Chandra", "shalini.chandra@jntua.local", "MINING", "Assistant Professor"),
-                new FacultySpec("FAC_FOOD01", "faculty123", Role.FACULTY, "Krupa", "Menon", "krupa.menon@jntua.local", "FOOD", "Assistant Professor"),
-                new FacultySpec("FAC_PETRO01", "faculty123", Role.FACULTY, "Sadiq", "Basha", "sadiq.basha@jntua.local", "PETRO", "Assistant Professor"),
-                new FacultySpec("FAC_MBA01", "faculty123", Role.FACULTY, "Rohit", "Bhat", "rohit.bhat@jntua.local", "MBA", "Professor"),
-                new FacultySpec("FAC_MCA01", "faculty123", Role.FACULTY, "Anjali", "Menon", "anjali.menon@jntua.local", "MCA", "Assistant Professor"),
-                new FacultySpec("FAC_MTMECH01", "faculty123", Role.FACULTY, "Hari", "Prasad", "hari.prasad@jntua.local", "MTMECH", "Associate Professor")
+                // HODs
+                new FacultySpec("HOD_CSE", "hod123", Role.HOD, "B.", "Sathyanarayana", "hod.cse@jntua.in", "CSE", "Professor and HOD", "9848022334"),
+                new FacultySpec("HOD_ECE", "hod123", Role.HOD, "M.", "Murali Krishna", "hod.ece@jntua.in", "ECE", "Professor and HOD", "9848022335"),
+                new FacultySpec("HOD_EEE", "hod123", Role.HOD, "V.", "Ramana Murthy", "hod.eee@jntua.in", "EEE", "Professor and HOD", "9848022336"),
+                new FacultySpec("HOD_MECH", "hod123", Role.HOD, "K.", "Subba Reddy", "hod.mech@jntua.in", "MECH", "Professor and HOD", "9848022337"),
+                new FacultySpec("HOD_CIVIL", "hod123", Role.HOD, "P.", "Siva Kumar", "hod.civil@jntua.in", "CIVIL", "Professor and HOD", "9848022338"),
+                new FacultySpec("HOD_IT", "hod123", Role.HOD, "M.", "Vijaya Kumar", "hod.it@jntua.in", "IT", "Professor and HOD", "9848022339"),
+                
+                // CSE Faculty
+                new FacultySpec("FAC_CSE01", "faculty123", Role.FACULTY, "L.", "Raman", "lakshmi.r@jntua.in", "CSE", "Associate Professor", "8142000101"),
+                new FacultySpec("FAC_CSE02", "faculty123", Role.FACULTY, "B.", "Sujatha Reddy", "sujatha.r@jntua.in", "CSE", "Assistant Professor", "8142000102"),
+                new FacultySpec("FAC_CSE03", "faculty123", Role.FACULTY, "K.", "Praveen", "praveen.k@jntua.in", "CSE", "Assistant Professor", "8142000103"),
+                
+                // ECE Faculty
+                new FacultySpec("FAC_ECE01", "faculty123", Role.FACULTY, "N.", "Gowtham Naidu", "gowtham.n@jntua.in", "ECE", "Associate Professor", "8142000201"),
+                new FacultySpec("FAC_ECE02", "faculty123", Role.FACULTY, "A.", "Bhavani Shankar", "bhavani.s@jntua.in", "ECE", "Assistant Professor", "8142000202"),
+                
+                // EEE Faculty
+                new FacultySpec("FAC_EEE01", "faculty123", Role.FACULTY, "T.", "Rama Devi", "rama.d@jntua.in", "EEE", "Associate Professor", "8142000301"),
+                new FacultySpec("FAC_EEE02", "faculty123", Role.FACULTY, "M.", "Anand Rao", "anand.r@jntua.in", "EEE", "Assistant Professor", "8142000302"),
+
+                // MECH Faculty
+                new FacultySpec("FAC_MECH01", "faculty123", Role.FACULTY, "R.", "Venkata Ramana", "venkata.r@jntua.in", "MECH", "Associate Professor", "8142000401"),
+                new FacultySpec("FAC_MECH02", "faculty123", Role.FACULTY, "K.", "Surendra", "surendra.k@jntua.in", "MECH", "Assistant Professor", "8142000402"),
+                
+                // CIVIL Faculty
+                new FacultySpec("FAC_CIVIL01", "faculty123", Role.FACULTY, "G.", "Siva Prasad", "siva.p@jntua.in", "CIVIL", "Assistant Professor", "8142000501"),
+                new FacultySpec("FAC_CIVIL02", "faculty123", Role.FACULTY, "K.", "Srinivas", "srinivas.k@jntua.in", "CIVIL", "Assistant Professor", "8142000502"),
+
+                // IT Faculty
+                new FacultySpec("FAC_IT01", "faculty123", Role.FACULTY, "M.", "Kalyani Desai", "kalyani.d@jntua.in", "IT", "Assistant Professor", "8142000601"),
+                new FacultySpec("FAC_IT02", "faculty123", Role.FACULTY, "D.", "Raju", "raju.d@jntua.in", "IT", "Assistant Professor", "8142000602")
         );
         Map<String, Faculty> result = new LinkedHashMap<>();
         specs.forEach(spec -> {
@@ -294,7 +271,7 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private Faculty ensureFaculty(FacultySpec spec, Department department) {
-        User user = ensureUser(spec.username, spec.password, spec.role, spec.firstName, spec.lastName, spec.email);
+        User user = ensureUser(spec.username, spec.password, spec.role, spec.firstName, spec.lastName, spec.email, spec.phone);
         return facultyRepository.findByUser(user)
                 .map(existing -> updateFaculty(existing, spec, department))
                 .orElseGet(() -> {
@@ -304,7 +281,7 @@ public class DataSeeder implements CommandLineRunner {
                     faculty.setDepartment(department.getCode());
                     faculty.setDepartmentEntity(department);
                     faculty.setDesignation(spec.designation);
-                    faculty.setQualifications("M.Tech");
+                    faculty.setQualifications("M.Tech., Ph.D");
                     faculty.setEmploymentStatus(EmploymentStatus.ACTIVE);
                     return facultyRepository.save(faculty);
                 });
@@ -320,89 +297,103 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void ensureAssignments(Map<String, Faculty> faculties, Map<String, CourseClass> classes, Map<String, Subject> subjects, AcademicYear year) {
-        List<AssignmentSpec> assignments = List.of(
-                new AssignmentSpec("FAC_CSE01", "CSE101", "CSE-UG-4", "A"),
-                new AssignmentSpec("FAC_CSE01", "MTCSE401", "MTCSE-PG-1", "A"),
-                new AssignmentSpec("FAC_CSEAI01", "CSEAI201", "CSEAI-UG-3", "A"),
-                new AssignmentSpec("FAC_CSEDS01", "CSEDS201", "CSEDS-UG-3", "A"),
-                new AssignmentSpec("FAC_CSECS01", "CSECS201", "CSECS-UG-3", "A"),
-                new AssignmentSpec("FAC_ECE01", "ECE101", "ECE-UG-3", "A"),
-                new AssignmentSpec("FAC_EEE01", "EEE101", "EEE-UG-2", "A"),
-                new AssignmentSpec("FAC_EIE01", "EIE201", "EIE-UG-2", "A"),
-                new AssignmentSpec("FAC_MECH01", "MECH101", "MECH-UG-2", "A"),
-                new AssignmentSpec("FAC_AUTO01", "AUTO201", "AUTO-UG-2", "A"),
-                new AssignmentSpec("FAC_CIVIL01", "CIVIL101", "CIVIL-UG-3", "A"),
-                new AssignmentSpec("FAC_IT01", "IT101", "IT-UG-2", "A"),
-                new AssignmentSpec("FAC_FOOD01", "FOOD201", "FOOD-UG-2", "A"),
-                new AssignmentSpec("FAC_PETRO01", "PETRO201", "PETRO-UG-2", "A"),
-                new AssignmentSpec("FAC_MBA01", "MBA101", "MBA-PG-1", "A"),
-                new AssignmentSpec("FAC_MCA01", "MCA201", "MCA-PG-1", "A"),
-                new AssignmentSpec("FAC_MTMECH01", "MTMECH401", "MTMECH-PG-1", "A"),
-                new AssignmentSpec("FAC_MTMECH01", "MTTHERM401", "MTTHERM-PG-1", "A")
-        );
-        assignments.forEach(spec -> ensureFacultyAssignment(
-                faculties.get(spec.facultyUsername),
-                subjects.get(spec.subjectCode),
-                classes.get(spec.classKey),
-                year,
-                spec.section));
+        Random rand = new Random(42);
+        List<Faculty> facultyList = new ArrayList<>(faculties.values());
+        List<Subject> subjectList = new ArrayList<>(subjects.values());
+        List<CourseClass> classList = new ArrayList<>(classes.values());
+
+        // Ensure every class has at least 3 subjects assigned
+        for (CourseClass cc : classList) {
+            List<Subject> deptSubjects = subjectList.stream()
+                .filter(s -> s.getCode().startsWith(cc.getDepartment()))
+                .collect(Collectors.toList());
+            
+            if (deptSubjects.isEmpty()) deptSubjects = subjectList; // fallback
+
+            for (int i = 0; i < Math.min(4, deptSubjects.size()); i++) {
+                Subject s = deptSubjects.get(i);
+                // Assign a faculty from the same department
+                List<Faculty> deptFaculty = facultyList.stream()
+                    .filter(f -> f.getDepartment().equals(cc.getDepartment()))
+                    .collect(Collectors.toList());
+                
+                if (!deptFaculty.isEmpty()) {
+                    Faculty f = deptFaculty.get(rand.nextInt(deptFaculty.size()));
+                    ensureFacultyAssignment(f, s, cc, year, cc.getName().endsWith("-A") ? "A" : "B");
+                }
+            }
+        }
+        
+        System.out.println("Assignments completed for all classes.");
     }
 
-    private void ensureStudents(Map<String, Department> departments, Map<String, CourseClass> classes, AcademicYear year) {
-        List<StudentSpec> students = List.of(
-                new StudentSpec("22X1A0501", "student123", "Saanvi", "Reddy", "CSE", classes.get("CSE-UG-4"), ProgramType.UG, 4, "A", 2021),
-                new StudentSpec("23X1A05AI1", "student123", "Dev", "Chakra", "CSEAI", classes.get("CSEAI-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("23X1A05DS2", "student123", "Nidhi", "Kapoor", "CSEDS", classes.get("CSEDS-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("23X1A05CS3", "student123", "Yash", "Mitra", "CSECS", classes.get("CSECS-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("23X1A0502", "student123", "Arjun", "Naik", "ECE", classes.get("ECE-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("24X1A0303", "student123", "Meghana", "Sai", "EEE", classes.get("EEE-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("24X1A0311", "student123", "Keerthana", "Das", "EIE", classes.get("EIE-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("24X1A0404", "student123", "Kiran", "Teja", "MECH", classes.get("MECH-UG-2"), ProgramType.UG, 2, "B", 2023),
-                new StudentSpec("24X1A0409", "student123", "Abdul", "Saleem", "AUTO", classes.get("AUTO-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("23X1A0401", "student123", "Ritika", "Sharma", "CIVIL", classes.get("CIVIL-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("25X1A0101", "student123", "Bhavya", "Joshi", "CHEM", classes.get("CHEM-UG-1"), ProgramType.UG, 1, "A", 2024),
-                new StudentSpec("24X1A0601", "student123", "Pranav", "Kumar", "IT", classes.get("IT-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("24X1A0701", "student123", "Priya", "Chandra", "EIE", classes.get("EIE-UG-2"), ProgramType.UG, 2, "B", 2023),
-                new StudentSpec("25X1A0801", "student123", "Nikhil", "Reddy", "BIOTECH", classes.get("BIOTECH-UG-1"), ProgramType.UG, 1, "A", 2024),
-                new StudentSpec("23X1A0901", "student123", "Shreya", "Das", "MET", classes.get("MET-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("23X1A1001", "student123", "Sohan", "Paul", "MINING", classes.get("MINING-UG-3"), ProgramType.UG, 3, "A", 2022),
-                new StudentSpec("24X1A1101", "student123", "Nayana", "M", "FOOD", classes.get("FOOD-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("24X1A1201", "student123", "Tarun", "Kashyap", "PETRO", classes.get("PETRO-UG-2"), ProgramType.UG, 2, "A", 2023),
-                new StudentSpec("P23CSE001", "student123", "Varun", "Rao", "MTCSE", classes.get("MTCSE-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23AI001", "student123", "Lavanya", "Shetty", "MTAI", classes.get("MTAI-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23DS001", "student123", "Sridhar", "Kulkarni", "MTDS", classes.get("MTDS-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23CYB001", "student123", "Isha", "Ahmed", "MTCYB", classes.get("MTCYB-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23ECE001", "student123", "Lakshmi", "Sharma", "MTECE", classes.get("MTECE-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23VLSI001", "student123", "Rohini", "Das", "MTVLSI", classes.get("MTVLSI-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23EMB001", "student123", "Mohan", "Raj", "MTEMB", classes.get("MTEMB-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23PWR001", "student123", "Sai", "Prakash", "MTPWR", classes.get("MTPWR-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("MBA23001", "student123", "Karthik", "Nair", "MBA", classes.get("MBA-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("MCA23001", "student123", "Divya", "Menon", "MCA", classes.get("MCA-PG-1"), ProgramType.PG, 1, "A", 2023),
-                new StudentSpec("P23MECH001", "student123", "Rahul", "Krishna", "MTMECH", classes.get("MTMECH-PG-1"), ProgramType.PG, 1, "A", 2023)
-        );
+    private void ensureStudents(Map<String, Department> departments, Map<String, CourseClass> classes, AcademicYear year, Map<String, Program> programs) {
+        String[] firstNames = {"Sai", "Teja", "Karthik", "Ravi", "Venkata", "Suresh", "Ramesh", "Mohan", "Krishna", "Ram", "Siva", "Kiran", "Naveen", "Pavan", "Prashanth", "Harish", "Tarun", "Akhil", "Anil", "Bhanu", "Charan", "Deepak", "Ganesh", "Hemanth", "Jagadish", "Madhav", "Manish", "Nithin", "Phani", "Prakash", "Swetha", "Keerthi", "Bhavana", "Kavya", "Ramya", "Sowmya", "Harika", "Akhila", "Goutami", "Jyothi", "Divya", "Sravani", "Bargavi", "Deepika"};
+        String[] lastNames = {"Reddy", "Rao", "Naidu", "Chowdary", "Goud", "Yadav", "Sharma", "Babu", "Kumar", "Varma", "Gowda", "Devi", "Kumari", "Latha", "Rani", "Sri"};
+        String[] deptsList = {"05", "04", "02", "03", "01", "12"}; // standard JNTUA branch codes
+
+        List<StudentSpec> students = new ArrayList<>();
+        Random rand = new Random(42);
+        
+        String[] deptCodes = {"CSE", "ECE", "EEE", "MECH", "CIVIL", "IT"};
+        
+        for (int d = 0; d < deptCodes.length; d++) {
+            String dept = deptCodes[d];
+            String branchCode = deptsList[d];
+            Program program = programs.get(dept + "_UG");
+            
+            for (int yearLevel = 1; yearLevel <= 4; yearLevel++) {
+                int admissionYear = 2024 - yearLevel + 1;
+                String yearStr = String.valueOf(admissionYear).substring(2);
+                
+                CourseClass classA = classes.get(dept + "-UG-" + yearLevel + "A");
+                CourseClass classB = classes.get(dept + "-UG-" + yearLevel + "B");
+                
+                // 30 students per section (60 per class total)
+                for (int i = 1; i <= 60; i++) {
+                    String section = (i <= 30) ? "A" : "B";
+                    CourseClass currentClass = (i <= 30) ? classA : classB;
+                    
+                    String fn = firstNames[rand.nextInt(firstNames.length)];
+                    String ln = lastNames[rand.nextInt(lastNames.length)];
+                    
+                    String rollSuffix = String.format("%02d", (i > 30 ? i - 30 : i));
+                    String rollNum = yearStr + "X1A" + branchCode + (i > 30 ? "B" : "0") + rollSuffix;
+                    String phone = "9" + String.format("%09d", rand.nextInt(1000000000));
+                    
+                    int currentSem = (yearLevel - 1) * 2 + 1;
+                    
+                    students.add(new StudentSpec(rollNum, "student123", fn, ln, dept, currentClass, program, currentSem, section, admissionYear, phone));
+                }
+            }
+        }
+        
+        System.out.println("Seeding " + students.size() + " students...");
         students.forEach(spec -> ensureStudent(spec, departments.get(spec.deptCode), year));
     }
 
     private void ensureFacultyAssignment(Faculty faculty, Subject subject, CourseClass courseClass, AcademicYear year, String section) {
         if (faculty == null || subject == null || courseClass == null) return;
-        facultySubjectMapRepository.findByFacultyAndAcademicYear(faculty, year).stream()
-                .filter(existing -> existing.getSubject().equals(subject) && existing.getCourseClass().equals(courseClass))
-                .findAny()
-                .orElseGet(() -> {
-                    FacultySubjectMap map = new FacultySubjectMap();
-                    map.setFaculty(faculty);
-                    map.setSubject(subject);
-                    map.setCourseClass(courseClass);
-                    map.setAcademicYear(year);
-                    map.setSection(section);
-                    map.setLocked(false);
-                    return facultySubjectMapRepository.save(map);
-                });
+        boolean exists = facultySubjectMapRepository.findByFacultyAndAcademicYear(faculty, year).stream()
+                .anyMatch(existing ->
+                        existing.getSubject().getId().equals(subject.getId())
+                        && existing.getCourseClass().getId().equals(courseClass.getId())
+                        && (existing.getSection() == null || existing.getSection().equals(section)));
+        if (!exists) {
+            FacultySubjectMap map = new FacultySubjectMap();
+            map.setFaculty(faculty);
+            map.setSubject(subject);
+            map.setCourseClass(courseClass);
+            map.setAcademicYear(year);
+            map.setSection(section);
+            map.setLocked(false);
+            facultySubjectMapRepository.save(map);
+        }
     }
 
     private void ensureStudent(StudentSpec spec, Department department, AcademicYear year) {
         if (department == null) return;
-        User user = ensureUser(spec.username, spec.password, Role.STUDENT, spec.firstName, spec.lastName, spec.email);
+        User user = ensureUser(spec.username, spec.password, Role.STUDENT, spec.firstName, spec.lastName, spec.email, spec.phone);
         Student student = studentRepository.findByUser(user)
                 .map(existing -> updateStudent(existing, spec, department))
                 .orElseGet(() -> {
@@ -412,7 +403,7 @@ public class DataSeeder implements CommandLineRunner {
                     created.setStudentId(spec.username);
                     created.setDepartment(department.getCode());
                     created.setDepartmentEntity(department);
-                    created.setProgram(spec.program);
+                    created.setProgram(spec.program != null ? spec.program.getType() : ProgramType.UG);
                     created.setCurrentSemester(spec.currentSemester);
                     created.setSection(spec.section);
                     created.setAdmissionYear(spec.admissionYear);
@@ -421,14 +412,14 @@ public class DataSeeder implements CommandLineRunner {
                 });
 
         if (spec.courseClass != null) {
-            studentClassMapRepository.findByStudentAndAcademicYear(student, year)
-                    .orElseGet(() -> {
-                        StudentClassMap map = new StudentClassMap();
-                        map.setStudent(student);
-                        map.setCourseClass(spec.courseClass);
-                        map.setAcademicYear(year);
-                        return studentClassMapRepository.save(map);
-                    });
+             boolean exists = studentClassMapRepository.existsByStudent_IdAndCourseClass_Id(student.getId(), spec.courseClass.getId());
+             if (!exists) {
+                 StudentClassMap map = new StudentClassMap();
+                 map.setStudent(student);
+                 map.setCourseClass(spec.courseClass);
+                 map.setAcademicYear(year);
+                 studentClassMapRepository.save(map);
+             }
         }
     }
 
@@ -437,7 +428,7 @@ public class DataSeeder implements CommandLineRunner {
         student.setStudentId(spec.username);
         student.setDepartment(department.getCode());
         student.setDepartmentEntity(department);
-        student.setProgram(spec.program);
+        student.setProgram(spec.program != null ? spec.program.getType() : ProgramType.UG);
         student.setCurrentSemester(spec.currentSemester);
         student.setSection(spec.section);
         student.setAdmissionYear(spec.admissionYear);
@@ -445,10 +436,77 @@ public class DataSeeder implements CommandLineRunner {
         return studentRepository.save(student);
     }
 
-    private User ensureUser(String username, String password, Role role, String firstName, String lastName, String email) {
+    private void ensureAttendanceData(AcademicYear year) {
+        if (attendanceSessionRepository.count() > 50) return; // Only seed if empty or very low
+
+        List<FacultySubjectMap> mappings = facultySubjectMapRepository.findByAcademicYear(year);
+        Random rand = new Random(42);
+
+        System.out.println("Seeding attendance data for " + mappings.size() + " mappings...");
+
+        for (FacultySubjectMap map : mappings) {
+            // Create 15-20 sessions per mapping for historical analysis
+            int sessionCount = 15 + rand.nextInt(6);
+            List<StudentClassMap> classStudents = studentClassMapRepository.findByCourseClass_IdAndAcademicYear_Id(
+                    map.getCourseClass().getId(), year.getId());
+
+            // Pre-identify some students as "defaulters" (consistent low attendance)
+            Set<Long> defaulterIds = new HashSet<>();
+            if (classStudents.size() > 5) {
+                int defCount = 2 + rand.nextInt(3);
+                for (int d = 0; d < defCount; d++) {
+                    defaulterIds.add(classStudents.get(rand.nextInt(classStudents.size())).getStudent().getId());
+                }
+            }
+
+            for (int i = 0; i < sessionCount; i++) {
+                AttendanceSession session = new AttendanceSession();
+                session.setFacultySubjectMap(map);
+                // Spread sessions over the last 30 days
+                session.setStartTime(java.time.LocalDateTime.now().minusDays(30 - (i * 1)).withHour(9 + rand.nextInt(6)).withMinute(0));
+                session.setEndTime(session.getStartTime().plusHours(1));
+                session.setActive(false);
+                session.setLatitude(14.6819);
+                session.setLongitude(77.6006);
+                session.setRadius(50.0);
+                session.setQrToken(UUID.randomUUID().toString());
+                session = attendanceSessionRepository.save(session);
+
+                for (StudentClassMap scm : classStudents) {
+                    double probability = 0.85 + (rand.nextDouble() * 0.12); // Average 85-97%
+                    
+                    if (defaulterIds.contains(scm.getStudent().getId())) {
+                        probability = 0.4 + (rand.nextDouble() * 0.3); // Defaulter average 40-70%
+                    }
+
+                    AttendanceRecord record = new AttendanceRecord();
+                    record.setSession(session);
+                    record.setStudent(scm.getStudent());
+                    record.setTimestamp(session.getStartTime().plusMinutes(5 + rand.nextInt(25)));
+                    
+                    if (rand.nextDouble() < probability) {
+                        record.setStatus(AttendanceStatus.PRESENT);
+                    } else {
+                        record.setStatus(AttendanceStatus.REJECTED);
+                        record.setRemarks("Absent");
+                    }
+                    attendanceRecordRepository.save(record);
+                }
+            }
+        }
+        System.out.println("Attendance data seeding completed.");
+    }
+
+    private User ensureUser(String username, String password, Role role, String firstName, String lastName, String email, String phone) {
         return userRepository.findByUsername(username)
                 .map(existing -> {
                     recordCredential(role.name(), username, password);
+                    if (existing.getContactNumber() == null || existing.getContactNumber().isEmpty()) {
+                        existing.setContactNumber(phone);
+                        existing.setFirstName(firstName);
+                        existing.setLastName(lastName);
+                        userRepository.save(existing);
+                    }
                     return existing;
                 })
                 .orElseGet(() -> {
@@ -459,6 +517,7 @@ public class DataSeeder implements CommandLineRunner {
                     user.setFirstName(firstName);
                     user.setLastName(lastName);
                     user.setEmail(email);
+                    user.setContactNumber(phone);
                     user.setFirstLogin(false);
                     User saved = userRepository.save(user);
                     recordCredential(role.name(), username, password);
@@ -501,8 +560,9 @@ public class DataSeeder implements CommandLineRunner {
         final String email;
         final String departmentCode;
         final String designation;
+        final String phone;
 
-        FacultySpec(String username, String password, Role role, String firstName, String lastName, String email, String departmentCode, String designation) {
+        FacultySpec(String username, String password, Role role, String firstName, String lastName, String email, String departmentCode, String designation, String phone) {
             this.username = username;
             this.password = password;
             this.role = role;
@@ -511,6 +571,7 @@ public class DataSeeder implements CommandLineRunner {
             this.email = email;
             this.departmentCode = departmentCode;
             this.designation = designation;
+            this.phone = phone;
         }
     }
 
@@ -521,13 +582,14 @@ public class DataSeeder implements CommandLineRunner {
         final String lastName;
         final String deptCode;
         final String email;
+        final String phone;
         final CourseClass courseClass;
-        final ProgramType program;
+        final Program program;
         final int currentSemester;
         final String section;
         final int admissionYear;
 
-        StudentSpec(String username, String password, String firstName, String lastName, String deptCode, CourseClass courseClass, ProgramType program, int currentSemester, String section, int admissionYear) {
+        StudentSpec(String username, String password, String firstName, String lastName, String deptCode, CourseClass courseClass, Program program, int currentSemester, String section, int admissionYear, String phone) {
             this.username = username;
             this.password = password;
             this.firstName = firstName;
@@ -538,7 +600,8 @@ public class DataSeeder implements CommandLineRunner {
             this.currentSemester = currentSemester;
             this.section = section;
             this.admissionYear = admissionYear;
-            this.email = username.toLowerCase() + "@jntua.local";
+            this.phone = phone;
+            this.email = username.toLowerCase() + "@jntua.in";
         }
     }
 

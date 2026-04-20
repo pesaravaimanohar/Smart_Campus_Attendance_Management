@@ -1,5 +1,6 @@
 package com.college.smartattendance.controller;
 
+import com.college.smartattendance.dto.ClassCurriculumDto;
 import com.college.smartattendance.dto.DepartmentDto;
 import com.college.smartattendance.dto.FacultyDto;
 import com.college.smartattendance.dto.FacultySubjectAssignmentDto;
@@ -8,6 +9,7 @@ import com.college.smartattendance.dto.SubjectDto;
 import com.college.smartattendance.entity.AcademicYear;
 import com.college.smartattendance.entity.CourseClass;
 import com.college.smartattendance.entity.Department;
+import com.college.smartattendance.service.ClassCurriculumService;
 import com.college.smartattendance.service.DataManagementService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,9 @@ public class DataManagementController {
 
     @Autowired
     private DataManagementService dataManagementService;
+
+    @Autowired
+    private ClassCurriculumService classCurriculumService;
 
     @GetMapping("/departments")
     public ResponseEntity<List<DepartmentDto>> getDepartments() {
@@ -135,5 +140,40 @@ public class DataManagementController {
     @GetMapping("/classes")
     public ResponseEntity<List<CourseClass>> getClasses() {
         return ResponseEntity.ok(dataManagementService.getAllClasses());
+    }
+
+    @GetMapping("/class-curriculum")
+    public ResponseEntity<List<ClassCurriculumDto>> listClassCurriculum() {
+        return ResponseEntity.ok(classCurriculumService.listAll());
+    }
+
+    @PostMapping("/class-curriculum")
+    public ResponseEntity<ClassCurriculumDto> createClassCurriculum(@RequestBody ClassCurriculumDto dto) {
+        return ResponseEntity.ok(classCurriculumService.save(dto));
+    }
+
+    @PutMapping("/class-curriculum/{id}")
+    public ResponseEntity<ClassCurriculumDto> updateClassCurriculum(
+            @PathVariable Long id, @RequestBody ClassCurriculumDto dto) {
+        dto.setId(id);
+        return ResponseEntity.ok(classCurriculumService.save(dto));
+    }
+
+    @DeleteMapping("/class-curriculum/{id}")
+    public ResponseEntity<Map<String, String>> deleteClassCurriculum(@PathVariable Long id) {
+        classCurriculumService.delete(id);
+        return ResponseEntity.ok(Map.of("message", "Deleted"));
+    }
+    @Autowired
+    private com.college.smartattendance.util.DataSeeder dataSeeder;
+
+    @PostMapping("/system/seed")
+    public ResponseEntity<Map<String, String>> triggerFullSeed() {
+        try {
+            dataSeeder.run();
+            return ResponseEntity.ok(Map.of("message", "Full dataset seeded successfully. High-volume data generated."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Seeding failed: " + e.getMessage()));
+        }
     }
 }
