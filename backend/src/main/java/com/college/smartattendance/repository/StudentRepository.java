@@ -25,4 +25,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     // via User relationship
     @Query("SELECT s FROM Student s WHERE s.user.role = 'STUDENT'")
     List<Student> findAllStudents();
+
+    long countByDepartmentEntity_Id(Long departmentId);
+    List<Student> findByDepartmentEntity_Id(Long departmentId);
 }

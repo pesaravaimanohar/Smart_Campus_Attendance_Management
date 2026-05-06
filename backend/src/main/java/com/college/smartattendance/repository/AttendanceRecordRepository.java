@@ -16,4 +16,5 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
 
     // Analytics
     long countByStudentAndStatus(Student student, com.college.smartattendance.entity.AttendanceStatus status);
+    void deleteByStudent_Id(Long studentId);
 }

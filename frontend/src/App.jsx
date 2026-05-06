@@ -6,6 +6,7 @@ import { ColorModeProvider } from "./context/ThemeContext";
 import Login from "./pages/Login";
 import StudentDashboard from "./pages/StudentDashboard";
 import FacultyDashboard from "./pages/FacultyDashboard";
+import CRCDashboard from "./pages/CRCDashboard";
 import HODDashboard from "./pages/HODDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
 import AdminDashboardNew from "./pages/AdminDashboardNew";
@@ -50,8 +51,17 @@ const AppRoutes = () => {
                 <Route
                     path="/faculty"
                     element={
-                        <ProtectedRoute allowedRoles={['FACULTY']}>
+                        <ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'PRINCIPAL']}>
                             <FacultyDashboard />
+                        </ProtectedRoute>
+                    }
+                />
+
+                <Route
+                    path="/crc"
+                    element={
+                        <ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'PRINCIPAL']}>
+                            <CRCDashboard />
                         </ProtectedRoute>
                     }
                 />

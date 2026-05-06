@@ -21,11 +21,15 @@ public class StudentDto {
     private String section;
     private StudentStatus status;
     private Integer admissionYear;
+    private Long classId;
 
     public StudentDto() {}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public Long getClassId() { return classId; }
+    public void setClassId(Long classId) { this.classId = classId; }
 
     public String getRollNumber() { return rollNumber; }
     public void setRollNumber(String rollNumber) { this.rollNumber = rollNumber; }

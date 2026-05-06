@@ -95,6 +95,11 @@ export const getStudentAlerts = async () => {
     return response.data;
 };
 
+export const markAlertAsRead = async (alertId) => {
+    const response = await apiClient.post(`/student/alerts/${alertId}/read`);
+    return response.data;
+};
+
 export const getStudentSubjects = async () => {
     const response = await apiClient.get('/student/subjects');
     return response.data;
@@ -195,6 +200,75 @@ export const getPrincipalDashboard = async () => {
     return response.data;
 };
 
+export const getHodFacultyList = async () => {
+    const response = await apiClient.get('/reports/hod/faculty-list');
+    return response.data;
+};
+
+export const getHodStudentList = async (classId) => {
+    const params = classId ? { classId } : {};
+    const response = await apiClient.get('/reports/hod/student-list', { params });
+    return response.data;
+};
+
+// ==================== CRC (Class Representative Coordinator) API ====================
+
+export const crcAPI = {
+    getMyClasses: async () => {
+        const response = await apiClient.get('/crc/my-classes');
+        return response.data;
+    },
+    getClassOverview: async (classId) => {
+        const response = await apiClient.get(`/crc/class/${classId}/overview`);
+        return response.data;
+    },
+    getClassStudents: async (classId) => {
+        const response = await apiClient.get(`/crc/class/${classId}/students`);
+        return response.data;
+    },
+    getClassSubjects: async (classId) => {
+        const response = await apiClient.get(`/crc/class/${classId}/subjects`);
+        return response.data;
+    },
+    getClassDefaulters: async (classId) => {
+        const response = await apiClient.get(`/crc/class/${classId}/defaulters`);
+        return response.data;
+    },
+};
+
+export const uploadTimetableImage = async (curriculumId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post(
+        `/admin/data/class-curriculum/${curriculumId}/timetable-image`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+};
+
+export const uploadClassTimetableFile = async (classId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post(
+        `/admin/data/classes/${classId}/timetable-file`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+};
+
+export const uploadClassSyllabusFile = async (classId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post(
+        `/admin/data/classes/${classId}/syllabus-file`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+};
+
 // ==================== QR ATTENDANCE API (Student) ====================
 
 export const markQrAttendance = async (qrData) => {
@@ -213,10 +287,11 @@ export const getSessionInfoByQr = async (qrToken) => {
 
 export const bulkUploadAPI = {
     // Validate student upload
-    validateStudentUpload: async (file) => {
+    validateStudentUpload: async (file, targetClassId) => {
         const formData = new FormData();
         formData.append('file', file);
         const response = await apiClient.post('/bulk-upload/students/validate', formData, {
+            params: targetClassId ? { targetClassId } : {},
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -225,8 +300,10 @@ export const bulkUploadAPI = {
     },
 
     // Confirm student upload
-    confirmStudentUpload: async (uploadLogId) => {
-        const response = await apiClient.post(`/bulk-upload/students/confirm/${uploadLogId}`);
+    confirmStudentUpload: async (uploadLogId, targetClassId) => {
+        const response = await apiClient.post(`/bulk-upload/students/confirm/${uploadLogId}`, {}, {
+            params: targetClassId ? { targetClassId } : {},
+        });
         return response.data;
     },
 
@@ -245,6 +322,46 @@ export const bulkUploadAPI = {
     // Confirm faculty upload
     confirmFacultyUpload: async (uploadLogId) => {
         const response = await apiClient.post(`/bulk-upload/faculty/confirm/${uploadLogId}`);
+        return response.data;
+    },
+
+    // Validate attendance upload
+    validateAttendanceUpload: async (file, mappingId, date) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await apiClient.post('/bulk-upload/attendance/validate', formData, {
+            params: { mappingId, date },
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
+    // Confirm attendance upload
+    confirmAttendanceUpload: async (uploadLogId, mappingId, date) => {
+        const response = await apiClient.post(`/bulk-upload/attendance/confirm/${uploadLogId}`, {}, {
+            params: { mappingId, date },
+        });
+        return response.data;
+    },
+
+    // Validate monthly attendance upload (matrix format: rows=students, columns=dates)
+    validateMonthlyAttendance: async (file, mappingId) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await apiClient.post('/bulk-upload/attendance/monthly/validate', formData, {
+            params: { mappingId },
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
+    // Confirm monthly attendance upload
+    confirmMonthlyAttendance: async (uploadLogId, mappingId) => {
+        const response = await apiClient.post(`/bulk-upload/attendance/monthly/confirm/${uploadLogId}`, {}, {
+            params: { mappingId },
+        });
         return response.data;
     },
 };
@@ -580,11 +697,12 @@ export const updateUserProfile = async (profileData) => {
 };
 
 export const adminDataAPI = {
-    request: async (method, path, body) => {
+    request: async (method, path, body, params) => {
         const response = await apiClient.request({
             method,
             url: `/admin/data${path}`,
             data: body,
+            params: params,
         });
         return response.data;
     },

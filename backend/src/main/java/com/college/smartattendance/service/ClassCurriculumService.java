@@ -44,6 +44,14 @@ public class ClassCurriculumService {
         classCurriculumRepository.deleteById(id);
     }
 
+    /** Set only the timetable image URL for an existing entry. */
+    public ClassCurriculumDto setTimetableImage(Long id, String imageUrl) {
+        ClassCurriculum entity = classCurriculumRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Class curriculum not found: " + id));
+        entity.setTimetableImageUrl(imageUrl);
+        return toDto(classCurriculumRepository.save(entity));
+    }
+
     public Optional<ClassCurriculumDto> findBestMatchForStudent(Student student) {
         if (student.getDepartmentEntity() == null) {
             return Optional.empty();
@@ -87,6 +95,7 @@ public class ClassCurriculumService {
         entity.setTimetableText(dto.getTimetableText());
         entity.setSyllabusText(dto.getSyllabusText());
         entity.setSyllabusUrl(dto.getSyllabusUrl());
+        entity.setTimetableImageUrl(dto.getTimetableImageUrl());
     }
 
     private ClassCurriculumDto toDto(ClassCurriculum e) {
@@ -99,6 +108,7 @@ public class ClassCurriculumService {
         d.setTimetableText(e.getTimetableText());
         d.setSyllabusText(e.getSyllabusText());
         d.setSyllabusUrl(e.getSyllabusUrl());
+        d.setTimetableImageUrl(e.getTimetableImageUrl());
         d.setUpdatedAt(e.getUpdatedAt());
         return d;
     }

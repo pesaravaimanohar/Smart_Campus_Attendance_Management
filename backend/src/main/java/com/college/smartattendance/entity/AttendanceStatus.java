@@ -4,5 +4,6 @@ public enum AttendanceStatus {
     PRESENT,
     PENDING_VERIFICATION,
     REJECTED,
-    MANUAL_VERIFIED
+    MANUAL_VERIFIED,
+    ABSENT
 }

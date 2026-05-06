@@ -40,6 +40,9 @@ public class ClassCurriculum {
     @Column(name = "syllabus_url", length = 1024)
     private String syllabusUrl;
 
+    @Column(name = "timetable_image_url", length = 1024)
+    private String timetableImageUrl;
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
@@ -111,6 +114,14 @@ public class ClassCurriculum {
 
     public void setSyllabusUrl(String syllabusUrl) {
         this.syllabusUrl = syllabusUrl;
+    }
+
+    public String getTimetableImageUrl() {
+        return timetableImageUrl;
+    }
+
+    public void setTimetableImageUrl(String timetableImageUrl) {
+        this.timetableImageUrl = timetableImageUrl;
     }
 
     public LocalDateTime getUpdatedAt() {

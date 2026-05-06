@@ -30,14 +30,33 @@ public class AttendanceService {
         @Autowired
         private StudentClassMapRepository studentClassMapRepository;
 
+        @Autowired
+        private SubjectRepository subjectRepository;
+
+        @Autowired
+        private LabFacultyAssignmentRepository labFacultyAssignmentRepository;
+
+        @Autowired
+        private LabAssignmentService labAssignmentService;
+
+        @Autowired
+        private StudentAlertRepository studentAlertRepository;
+
         @Transactional
         public AttendanceSession createSession(Long facultySubjectMapId, Double lat, Double lon,
                         Integer durationMinutes,
-                        Double radius) {
+                        Double radius, String period, Integer numberOfHours) {
                 FacultySubjectMap map = facultySubjectMapRepository.findById(facultySubjectMapId)
                                 .orElseThrow(() -> new RuntimeException("Mapping not found"));
 
-                // Deactivate any existing active sessions for this mapping
+                if (numberOfHours == null || numberOfHours < 1) numberOfHours = 1;
+                if (numberOfHours > 3) numberOfHours = 3;
+
+                // Overlap check
+                Long classId = map.getCourseClass().getId();
+                validatePeriodOverlap(classId, period, numberOfHours);
+
+                // Deactivate any existing active sessions for this mapping (redundant but safe)
                 List<AttendanceSession> activeSessions = sessionRepository.findByFacultySubjectMap_Id(facultySubjectMapId);
                 for (AttendanceSession s : activeSessions) {
                         if (s.isActive()) {
@@ -49,6 +68,7 @@ public class AttendanceService {
 
                 AttendanceSession session = new AttendanceSession();
                 session.setFacultySubjectMap(map);
+                session.setCourseClass(map.getCourseClass());
                 session.setStartTime(LocalDateTime.now());
                 session.setEndTime(LocalDateTime.now().plusMinutes(durationMinutes));
                 session.setActive(true);
@@ -56,8 +76,41 @@ public class AttendanceService {
                 session.setLongitude(lon);
                 session.setRadius(radius != null ? radius : 50.0);
                 session.setQrToken(UUID.randomUUID().toString());
+                session.setPeriod(period);
+                session.setNumberOfHours(numberOfHours);
 
                 return sessionRepository.save(session);
+        }
+
+        private void validatePeriodOverlap(Long classId, String periodStr, Integer hours) {
+            int startPeriod;
+            try {
+                startPeriod = Integer.parseInt(periodStr);
+            } catch (Exception e) {
+                return; // Not a numeric period, skip validation for now (e.g. special sessions)
+            }
+
+            java.util.Set<Integer> requestedPeriods = new java.util.HashSet<>();
+            for (int i = 0; i < hours; i++) {
+                requestedPeriods.add(startPeriod + i);
+            }
+
+            List<AttendanceSession> todaySessions = sessionRepository.findSessionsByClassForToday(classId);
+            for (AttendanceSession s : todaySessions) {
+                try {
+                    int sStart = Integer.parseInt(s.getPeriod());
+                    int sHours = s.getNumberOfHours() != null ? s.getNumberOfHours() : 1;
+                    for (int i = 0; i < sHours; i++) {
+                        if (requestedPeriods.contains(sStart + i)) {
+                            throw new RuntimeException("Period " + (sStart + i) + " is already taken by " + 
+                                (s.getFacultySubjectMap() != null ? s.getFacultySubjectMap().getSubject().getName() : s.getLabSubject().getName()));
+                        }
+                    }
+                } catch (Exception e) {
+                    if (e instanceof RuntimeException) throw (RuntimeException) e;
+                    // Ignore parsing errors for individual sessions
+                }
+            }
         }
 
         @Transactional
@@ -81,6 +134,36 @@ public class AttendanceService {
                 session.setActive(false);
                 session.setEndTime(LocalDateTime.now());
                 session.setQrToken(null);
+                
+                // Mark absentees: find all students in this class and if no record exists, mark ABSENT
+                FacultySubjectMap map = session.getFacultySubjectMap();
+                CourseClass courseClass = map.getCourseClass();
+                String section = map.getSection();
+
+                List<StudentClassMap> classMaps = studentClassMapRepository.findByCourseClass_Id(courseClass.getId());
+                for (StudentClassMap scm : classMaps) {
+                        Student student = scm.getStudent();
+                        
+                        // If section is specified in session, only mark students in that section
+                        if (section != null && !section.isEmpty()) {
+                                if (!section.equalsIgnoreCase(student.getSection())) {
+                                        continue;
+                                }
+                        }
+
+                        // Check if record exists
+                        Optional<AttendanceRecord> existing = recordRepository.findBySessionAndStudent(session, student);
+                        if (existing.isEmpty()) {
+                                AttendanceRecord absentRecord = new AttendanceRecord();
+                                absentRecord.setSession(session);
+                                absentRecord.setStudent(student);
+                                absentRecord.setTimestamp(LocalDateTime.now());
+                                absentRecord.setStatus(AttendanceStatus.ABSENT);
+                                absentRecord.setRemarks("System: Automatic Absent");
+                                recordRepository.save(absentRecord);
+                        }
+                }
+
                 return sessionRepository.save(session);
         }
 
@@ -249,22 +332,9 @@ public class AttendanceService {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                List<AttendanceRecord> records = recordRepository.findByStudent(student);
-                long totalPresent = records.stream()
-                                .filter(r -> r.getStatus() == AttendanceStatus.PRESENT
-                                                || r.getStatus() == AttendanceStatus.MANUAL_VERIFIED)
-                                .count();
-                long totalSessions = records.size(); // Use total sessions logic later for global count
-
-                // This simplistic logic assumes records exist only for attended sessions.
-                // Real-world: Need to count total sessions conducted for the student's class.
-                // For MVP, we will count 'Present' vs 'Total Records' (which includes
-                // Rejected/Pending).
-                // A better approach is to query all sessions for the class.
-
-                // Get Student's Class ID
-                // Simplified: Assuming 1 class per student for now
-                // Extend: Find all sessions for student's mapped class
+                long[] stats = getStudentAttendanceStats(student, null);
+                long totalSessions = stats[0];
+                long totalPresent = stats[1];
 
                 double percentage = totalSessions == 0 ? 0 : ((double) totalPresent / totalSessions) * 100;
 
@@ -275,6 +345,63 @@ public class AttendanceService {
                 dto.setAttendanceStatus(percentage >= 75 ? "Eligible" : "Low Attendance");
 
                 return dto;
+        }
+
+        private long[] getStudentAttendanceStats(Student student, Long subjectId) {
+                List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(student.getId());
+                long totalSessions = 0;
+                long totalPresent = 0;
+
+                for (StudentClassMap scm : classMaps) {
+                        Long classId = scm.getCourseClass().getId();
+                        List<AttendanceSession> sessions = sessionRepository.findByCourseClass_Id(classId);
+
+                        for (AttendanceSession session : sessions) {
+                                // Subject filter
+                                Long sId = session.getFacultySubjectMap() != null ? session.getFacultySubjectMap().getSubject().getId()
+                                                : (session.getLabSubject() != null ? session.getLabSubject().getId()
+                                                                : null);
+                                if (subjectId != null && (sId == null || !sId.equals(subjectId))) {
+                                        continue;
+                                }
+
+                                // Section filter
+                                if (session.getFacultySubjectMap() != null
+                                                && session.getFacultySubjectMap().getSection() != null
+                                                && !session.getFacultySubjectMap().getSection().isEmpty()) {
+                                        if (!session.getFacultySubjectMap().getSection()
+                                                        .equalsIgnoreCase(student.getSection())) {
+                                                continue;
+                                        }
+                                }
+
+                                int hours = session.getNumberOfHours() != null ? session.getNumberOfHours() : 1;
+                                Optional<AttendanceRecord> rec = recordRepository.findBySessionAndStudent(session,
+                                                student);
+
+                                boolean isTrulyActive = session.isActive()
+                                                && LocalDateTime.now().isBefore(session.getEndTime());
+
+                                if (isTrulyActive) {
+                                        // For active sessions, only count if student marked present
+                                        if (rec.isPresent() && (rec.get().getStatus() == AttendanceStatus.PRESENT
+                                                        || rec.get()
+                                                                        .getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
+                                                totalSessions += hours;
+                                                totalPresent += hours;
+                                        }
+                                } else {
+                                        // For ended or expired sessions, they always count towards total
+                                        totalSessions += hours;
+                                        if (rec.isPresent() && (rec.get().getStatus() == AttendanceStatus.PRESENT
+                                                        || rec.get()
+                                                                        .getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
+                                                totalPresent += hours;
+                                        }
+                                }
+                        }
+                }
+                return new long[] { totalSessions, totalPresent };
         }
 
         // Haversine formula
@@ -292,50 +419,70 @@ public class AttendanceService {
                 return distance;
         }
 
-        public List<Subject> getStudentSubjects(Long studentId) {
+        public List<java.util.Map<String, Object>> getStudentSubjects(Long studentId) {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                // Get all attendance records for this student
-                List<AttendanceRecord> records = recordRepository.findByStudent(student);
+                // Get all subjects assigned to student's class
+                List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(student.getId());
+                java.util.Map<Long, Subject> subjectMap = new java.util.HashMap<>();
+                for (StudentClassMap scm : classMaps) {
+                        Long classId = scm.getCourseClass().getId();
+                        
+                        // 1. Regular subjects
+                        List<FacultySubjectMap> fsms = facultySubjectMapRepository.findByCourseClass_Id(classId);
+                        for (FacultySubjectMap fsm : fsms) {
+                                if (fsm.getSection() == null || fsm.getSection().isEmpty() || fsm.getSection().equalsIgnoreCase(student.getSection())) {
+                                        subjectMap.put(fsm.getSubject().getId(), fsm.getSubject());
+                                }
+                        }
 
-                // Extract unique subjects from sessions
-                return records.stream()
-                                .map(record -> record.getSession().getFacultySubjectMap().getSubject())
-                                .distinct()
-                                .collect(java.util.stream.Collectors.toList());
+                        // 2. Lab assignments
+                        List<LabFacultyAssignment> labs = labFacultyAssignmentRepository.findByCourseClass_IdAndActiveTrue(classId);
+                        for (LabFacultyAssignment lab : labs) {
+                                subjectMap.put(lab.getLabSubject().getId(), lab.getLabSubject());
+                        }
+                }
+
+                java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+                for (Subject subject : subjectMap.values()) {
+                        long[] stats = getStudentAttendanceStats(student, subject.getId());
+                        long total = stats[0];
+                        long attended = stats[1];
+                        double pct = total == 0 ? 0 : Math.round(((double) attended / total) * 100.0 * 10) / 10.0;
+
+                        java.util.Map<String, Object> item = new java.util.LinkedHashMap<>();
+                        item.put("id", subject.getId());
+                        item.put("name", subject.getName());
+                        item.put("code", subject.getCode());
+                        item.put("attended", attended);
+                        item.put("total", total);
+                        item.put("attendancePercentage", pct);
+                        result.add(item);
+                }
+
+                // Sort by subject name
+                result.sort((a, b) -> ((String) a.get("name")).compareTo((String) b.get("name")));
+                return result;
         }
+
 
         public com.college.smartattendance.dto.SubjectAttendanceDto getSubjectAttendance(Long studentId,
                         Long subjectId) {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                // Get all attendance records for this student
-                List<AttendanceRecord> records = recordRepository.findByStudent(student);
-
-                // Filter records for the specific subject
-                List<AttendanceRecord> subjectRecords = records.stream()
-                                .filter(record -> record.getSession().getFacultySubjectMap().getSubject().getId()
-                                                .equals(subjectId))
-                                .collect(java.util.stream.Collectors.toList());
-
-                long totalSessions = subjectRecords.size();
-                long presentCount = subjectRecords.stream()
-                                .filter(r -> r.getStatus() == AttendanceStatus.PRESENT
-                                                || r.getStatus() == AttendanceStatus.MANUAL_VERIFIED)
-                                .count();
+                long[] stats = getStudentAttendanceStats(student, subjectId);
+                long totalSessions = stats[0];
+                long presentCount = stats[1];
 
                 double percentage = totalSessions == 0 ? 0 : ((double) presentCount / totalSessions) * 100;
 
                 com.college.smartattendance.dto.SubjectAttendanceDto dto = new com.college.smartattendance.dto.SubjectAttendanceDto();
                 dto.setSubjectId(subjectId);
 
-                // Get subject name
-                if (!subjectRecords.isEmpty()) {
-                        dto.setSubjectName(subjectRecords.get(0).getSession().getFacultySubjectMap().getSubject()
-                                        .getName());
-                }
+                // Get subject name from database
+                subjectRepository.findById(subjectId).ifPresent(s -> dto.setSubjectName(s.getName()));
 
                 dto.setTotalSessions(totalSessions);
                 dto.setPresentCount(presentCount);
@@ -348,12 +495,9 @@ public class AttendanceService {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                List<AttendanceRecord> records = recordRepository.findByStudent(student);
-                long totalSessions = records.size();
-                long presentCount = records.stream()
-                                .filter(r -> r.getStatus() == AttendanceStatus.PRESENT
-                                                || r.getStatus() == AttendanceStatus.MANUAL_VERIFIED)
-                                .count();
+                long[] stats = getStudentAttendanceStats(student, null);
+                long totalSessions = stats[0];
+                long presentCount = stats[1];
 
                 double currentPercentage = totalSessions == 0 ? 0 : ((double) presentCount / totalSessions) * 100;
                 double requiredPercentage = 75.0;
@@ -361,6 +505,7 @@ public class AttendanceService {
                 // Calculate classes needed to reach 75%
                 int classesNeeded = 0;
                 if (currentPercentage < requiredPercentage) {
+                        // Formula: (P + x) / (T + x) = 0.75  => P + x = 0.75T + 0.75x => 0.25x = 0.75T - P => x = 3T - 4P
                         classesNeeded = (int) Math.ceil((requiredPercentage * totalSessions - presentCount * 100)
                                         / (100 - requiredPercentage));
                         classesNeeded = Math.max(0, classesNeeded);
@@ -447,6 +592,7 @@ public class AttendanceService {
                                                         dto.setStatus("Pending");
                                                         break;
                                                 case REJECTED:
+                                                case ABSENT:
                                                         dto.setStatus("Absent");
                                                         break;
                                                 default:
@@ -458,25 +604,46 @@ public class AttendanceService {
                                 .collect(java.util.stream.Collectors.toList());
         }
 
-        public List<String> getStudentAlerts(Long studentId) {
+        @Transactional
+        public List<com.college.smartattendance.dto.StudentAlertDto> getStudentAlerts(Long studentId) {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                List<String> alerts = new java.util.ArrayList<>();
+                // 1. Generate current candidate alerts
+                List<StudentAlert> candidates = new java.util.ArrayList<>();
 
                 com.college.smartattendance.dto.AttendanceStatusDto status = getAttendanceStatus(studentId);
-                if (status.getCurrentPercentage() < 75) {
-                        alerts.add("⚠️ Your overall attendance is below 75% (" +
-                                        String.format("%.1f", status.getCurrentPercentage()) + "%)");
+                if (status.getTotalSessions() > 0 && status.getCurrentPercentage() < 75) {
+                    double pct = status.getCurrentPercentage();
+                    String msg = "⚠️ Your overall attendance is below 75% (" + String.format("%.1f", pct) + "%)";
+                    String key = "OVERALL_LOW:" + Math.round(pct);
+                    
+                    StudentAlert sa = new StudentAlert();
+                    sa.setStudent(student);
+                    sa.setAlertKey(key);
+                    sa.setMessage(msg);
+                    sa.setType("LOW_ATTENDANCE");
+                    sa.setCreatedAt(LocalDateTime.now());
+                    candidates.add(sa);
                 }
 
-                List<Subject> subjects = getStudentSubjects(studentId);
-                for (Subject subject : subjects) {
-                        com.college.smartattendance.dto.SubjectAttendanceDto subjectDto = getSubjectAttendance(
-                                        studentId, subject.getId());
-                        if (subjectDto.getPercentage() < 65) {
-                                alerts.add("🔴 Low attendance in " + subject.getName() +
-                                                " (" + String.format("%.1f", subjectDto.getPercentage()) + "%)");
+                java.util.List<java.util.Map<String, Object>> subjects = getStudentSubjects(studentId);
+                for (java.util.Map<String, Object> subject : subjects) {
+                        Long subjectId = (Long) subject.get("id");
+                        long total = ((Number) subject.get("total")).longValue();
+                        double pct = ((Number) subject.get("attendancePercentage")).doubleValue();
+                        
+                        if (total > 0 && pct < 65) {
+                            String msg = "🔴 Low attendance in " + subject.get("name") + " (" + String.format("%.1f", pct) + "%)";
+                            String key = "SUBJECT_LOW:" + subjectId + ":" + Math.round(pct);
+                            
+                            StudentAlert sa = new StudentAlert();
+                            sa.setStudent(student);
+                            sa.setAlertKey(key);
+                            sa.setMessage(msg);
+                            sa.setType("LOW_ATTENDANCE");
+                            sa.setCreatedAt(LocalDateTime.now());
+                            candidates.add(sa);
                         }
                 }
 
@@ -488,11 +655,147 @@ public class AttendanceService {
                 for (AttendanceSession session : yesterdaySessions) {
                         boolean marked = recordRepository.findBySessionAndStudent(session, student).isPresent();
                         if (!marked) {
-                                alerts.add("⚠️ You missed attendance for " +
-                                                session.getFacultySubjectMap().getSubject().getName() + " yesterday");
+                            String subName = session.getFacultySubjectMap() != null ? session.getFacultySubjectMap().getSubject().getName() : "Lab";
+                            String msg = "⚠️ You missed attendance for " + subName + " yesterday";
+                            String key = "MISSED_SESSION:" + session.getId();
+                            
+                            StudentAlert sa = new StudentAlert();
+                            sa.setStudent(student);
+                            sa.setAlertKey(key);
+                            sa.setMessage(msg);
+                            sa.setType("MISSED_SESSION");
+                            sa.setCreatedAt(LocalDateTime.now());
+                            candidates.add(sa);
                         }
                 }
 
-                return alerts;
+                // 2. Sync with DB
+                for (StudentAlert candidate : candidates) {
+                    Optional<StudentAlert> existing = studentAlertRepository.findByStudent_IdAndAlertKey(studentId, candidate.getAlertKey());
+                    if (existing.isEmpty()) {
+                        studentAlertRepository.save(candidate);
+                    }
+                }
+
+                // 3. Return unread alerts
+                return studentAlertRepository.findByStudent_IdAndIsReadFalse(studentId).stream()
+                        .map(sa -> new com.college.smartattendance.dto.StudentAlertDto(
+                            sa.getId(), sa.getAlertKey(), sa.getMessage(), sa.getType(), sa.getCreatedAt()
+                        ))
+                        .collect(java.util.stream.Collectors.toList());
+        }
+
+        @Transactional
+        public void markAlertAsRead(Long alertId) {
+            StudentAlert alert = studentAlertRepository.findById(alertId)
+                .orElseThrow(() -> new RuntimeException("Alert not found"));
+            alert.setRead(true);
+            studentAlertRepository.save(alert);
+        }
+
+        /**
+         * Create an attendance session for a lab (multi-faculty)
+         */
+        @Transactional
+        public AttendanceSession createLabSession(Long labSubjectId, Long classId, Long createdByFacultyId,
+                                                  Double lat, Double lon, Integer durationMinutes, Double radius, String period, Integer numberOfHours) {
+                // Verify the subject is of type LAB
+                Subject labSubject = subjectRepository.findById(labSubjectId)
+                                .orElseThrow(() -> new RuntimeException("Lab subject not found"));
+
+                if (!SubjectType.LAB.equals(labSubject.getSubjectType())) {
+                        throw new RuntimeException("Subject is not of type LAB");
+                }
+
+                if (numberOfHours == null || numberOfHours < 1) numberOfHours = 1;
+                if (numberOfHours > 3) numberOfHours = 3;
+
+                // Overlap check
+                validatePeriodOverlap(classId, period, numberOfHours);
+
+                // Verify faculty is assigned to this lab
+                boolean isFacultyAssigned = labAssignmentService.isFacultyAssignedToLab(createdByFacultyId, labSubjectId, classId);
+                if (!isFacultyAssigned) {
+                        throw new RuntimeException("Faculty is not assigned to this lab");
+                }
+
+                // Deactivate any existing active sessions for this lab
+                List<AttendanceSession> activeSessions = sessionRepository.findAll().stream()
+                                .filter(s -> s.getIsLabSession() && s.getLabSubject().getId().equals(labSubjectId)
+                                        && s.isActive() && LocalDateTime.now().isBefore(s.getEndTime()))
+                                .collect(java.util.stream.Collectors.toList());
+
+                for (AttendanceSession s : activeSessions) {
+                        s.setActive(false);
+                        s.setEndTime(LocalDateTime.now());
+                        sessionRepository.save(s);
+                }
+
+                AttendanceSession session = new AttendanceSession();
+                session.setLabSubject(labSubject);
+                session.setIsLabSession(true);
+                session.setCreatedByFacultyId(createdByFacultyId);
+                
+                // Set CourseClass for easier lookup
+                CourseClass courseClass = new CourseClass();
+                courseClass.setId(classId);
+                session.setCourseClass(courseClass);
+
+                session.setStartTime(LocalDateTime.now());
+                session.setEndTime(LocalDateTime.now().plusMinutes(durationMinutes));
+                session.setActive(true);
+                session.setLatitude(lat);
+                session.setLongitude(lon);
+                session.setRadius(radius != null ? radius : 50.0);
+                session.setQrToken(UUID.randomUUID().toString());
+                session.setPeriod(period);
+                session.setNumberOfHours(numberOfHours);
+
+                return sessionRepository.save(session);
+        }
+
+        /**
+         * End a lab session and mark absentees
+         */
+        @Transactional
+        public AttendanceSession endLabSession(Long sessionId) {
+                AttendanceSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                if (!session.getIsLabSession()) {
+                        throw new RuntimeException("This is not a lab session");
+                }
+
+                session.setActive(false);
+                session.setEndTime(LocalDateTime.now());
+                session.setQrToken(null);
+
+                // Get the lab subject and find all students enrolled in the corresponding class
+                Subject labSubject = session.getLabSubject();
+
+                // For lab sessions, we need to find students based on the lab's subject assignment
+                // Find lab faculty assignment to get the course class
+                List<LabFacultyAssignment> assignments = labAssignmentService.getLabFaculty(labSubject.getId(), 0L);
+                if (!assignments.isEmpty()) {
+                        CourseClass courseClass = assignments.get(0).getCourseClass();
+                        List<StudentClassMap> classMaps = studentClassMapRepository.findByCourseClass_Id(courseClass.getId());
+
+                        for (StudentClassMap scm : classMaps) {
+                                Student student = scm.getStudent();
+
+                                Optional<AttendanceRecord> existing = recordRepository.findBySessionAndStudent(session, student);
+                                if (existing.isEmpty()) {
+                                        AttendanceRecord absentRecord = new AttendanceRecord();
+                                        absentRecord.setSession(session);
+                                        absentRecord.setStudent(student);
+                                        absentRecord.setTimestamp(LocalDateTime.now());
+                                        absentRecord.setStatus(AttendanceStatus.ABSENT);
+                                        absentRecord.setRemarks("System: Lab - Automatic Absent");
+                                        recordRepository.save(absentRecord);
+                                }
+                        }
+                }
+
+                return sessionRepository.save(session);
         }
 }

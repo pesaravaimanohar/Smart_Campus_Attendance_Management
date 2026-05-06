@@ -52,9 +52,9 @@ const DashboardLayout = ({
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            bgcolor: isDark ? 'background.paper' : 'background.paper',
+            bgcolor: isDark ? '#0B0F19' : 'background.paper',
             borderRight: '1px solid',
-            borderColor: 'divider',
+            borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'divider',
         }}>
             {/* Portal Brand */}
             <Box sx={{
@@ -121,12 +121,19 @@ const DashboardLayout = ({
                                 position: 'relative',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                 bgcolor: isActive
-                                    ? alpha(theme.palette.primary.main, isDark ? 0.2 : 0.08)
+                                    ? isDark
+                                        ? 'transparent'
+                                        : alpha(theme.palette.primary.main, 0.08)
                                     : 'transparent',
+                                background: isActive && isDark
+                                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.secondary.main, 0.10)} 100%)`
+                                    : undefined,
                                 color: isActive ? 'primary.main' : 'text.secondary',
                                 '&:hover': {
                                     bgcolor: isActive
-                                        ? alpha(theme.palette.primary.main, isDark ? 0.25 : 0.12)
+                                        ? isDark
+                                            ? alpha(theme.palette.primary.main, 0.22)
+                                            : alpha(theme.palette.primary.main, 0.12)
                                         : alpha(theme.palette.text.primary, 0.04),
                                     transform: 'translateX(2px)',
                                 },
@@ -287,8 +294,10 @@ const DashboardLayout = ({
                         top: 0,
                         zIndex: 1100,
                         minHeight: 56,
-                        backdropFilter: 'blur(12px)',
-                        backgroundColor: alpha(theme.palette.background.paper, isDark ? 0.85 : 0.9),
+                        backdropFilter: 'blur(16px)',
+                        backgroundColor: isDark
+                            ? alpha('#0B0F19', 0.88)
+                            : alpha(theme.palette.background.paper, 0.9),
                     }}>
                         <Box display="flex" alignItems="center" gap={1.5}>
                             <IconButton

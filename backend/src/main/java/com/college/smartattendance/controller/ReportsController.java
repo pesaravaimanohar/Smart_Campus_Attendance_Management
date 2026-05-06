@@ -57,6 +57,76 @@ public class ReportsController {
         }
     }
 
+    @PreAuthorize("hasAnyRole('HOD', 'ADMIN')")
+    @GetMapping("/hod/faculty-list")
+    public ResponseEntity<?> getHodFacultyList(Principal principal) {
+        try {
+            Faculty hod = facultyService.getFacultyByUsername(principal.getName());
+            String deptCode = hod.getDepartment();
+            List<Faculty> faculties = facultyRepository.findByDepartment(deptCode);
+
+            List<Map<String, Object>> result = faculties.stream().map(f -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", f.getId());
+                String fn = f.getUser().getFirstName() != null ? f.getUser().getFirstName() : "";
+                String ln = f.getUser().getLastName() != null ? f.getUser().getLastName() : "";
+                m.put("name", (fn + " " + ln).trim());
+                m.put("facultyId", f.getFacultyId());
+                m.put("designation", f.getDesignation());
+                m.put("status", f.getEmploymentStatus() != null ? f.getEmploymentStatus().name() : "ACTIVE");
+
+                List<AttendanceSession> sessions = attendanceSessionRepository
+                        .findByFacultySubjectMap_Faculty_Department(deptCode).stream()
+                        .filter(s -> s.getFacultySubjectMap().getFaculty().getId().equals(f.getId()))
+                        .collect(Collectors.toList());
+                m.put("totalSessions", sessions.size());
+                m.put("avgAttendance", calculateAvgAttendance(sessions));
+                return m;
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PreAuthorize("hasAnyRole('HOD', 'ADMIN')")
+    @GetMapping("/hod/student-list")
+    public ResponseEntity<?> getHodStudentList(Principal principal) {
+        try {
+            Faculty hod = facultyService.getFacultyByUsername(principal.getName());
+            String deptCode = hod.getDepartment();
+            List<Student> students = studentRepository.findByDepartment(deptCode);
+
+            List<Map<String, Object>> result = students.stream().map(s -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", s.getId());
+                m.put("rollNumber", s.getRollNumber());
+                String fn = s.getUser() != null && s.getUser().getFirstName() != null ? s.getUser().getFirstName() : "";
+                String ln = s.getUser() != null && s.getUser().getLastName() != null ? s.getUser().getLastName() : "";
+                m.put("name", (fn + " " + ln).trim());
+                m.put("semester", s.getCurrentSemester());
+                m.put("section", s.getSection());
+
+                List<AttendanceRecord> records = attendanceRecordRepository.findByStudent(s);
+                long present = records.stream()
+                        .filter(r -> r.getStatus() == AttendanceStatus.PRESENT
+                                || r.getStatus() == AttendanceStatus.MANUAL_VERIFIED)
+                        .count();
+                double pct = records.isEmpty() ? 0 : Math.round(((double) present / records.size()) * 100.0 * 10) / 10.0;
+                m.put("attendancePercentage", pct);
+                m.put("totalPresent", present);
+                m.put("totalSessions", records.size());
+                m.put("status", pct >= 75 ? "Safe" : pct >= 65 ? "At Risk" : "Critical");
+                return m;
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
     @GetMapping("/principal/dashboard")
     public ResponseEntity<?> getPrincipalDashboard() {

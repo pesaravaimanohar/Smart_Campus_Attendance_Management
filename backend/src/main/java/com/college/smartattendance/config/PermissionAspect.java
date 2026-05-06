@@ -42,13 +42,17 @@ public class PermissionAspect {
         }
 
         String username = authentication.getName();
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AccessDeniedException("User not found: " + username));
+        String normalizedUsername = username != null ? username.trim().toLowerCase() : "";
+        
+        User user = userRepository.findByUsername(normalizedUsername)
+                .orElseGet(() -> userRepository.findByUsername(username)
+                .orElseThrow(() -> new AccessDeniedException("User not found: " + username)));
 
         Role userRole = user.getRole();
         PermissionMatrix.Permission requiredPermission = requiresPermission.value();
 
         if (!permissionMatrix.hasPermission(userRole, requiredPermission)) {
+            System.err.println("Permission Denied: User " + username + " with role " + userRole + " lacks " + requiredPermission);
             throw new AccessDeniedException(
                     "Access denied: role " + userRole + " lacks permission " + requiredPermission);
         }

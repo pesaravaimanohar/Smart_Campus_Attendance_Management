@@ -27,22 +27,22 @@ export const getThemeOptions = (mode) => ({
                 },
             }
             : {
-                // Dark Mode
+                // Dark Mode — Premium SaaS
                 primary: {
-                    main: '#818CF8', // Indigo 400
-                    light: '#A5B4FC',
+                    main: '#6366F1', // Indigo 500
+                    light: '#818CF8',
                     dark: '#4338CA',
-                    contrastText: '#0F172A',
+                    contrastText: '#FFFFFF',
                 },
                 secondary: {
-                    main: '#A78BFA', // Violet 400
-                    light: '#C4B5FD',
+                    main: '#8B5CF6', // Violet 500
+                    light: '#A78BFA',
                     dark: '#7C3AED',
-                    contrastText: '#0F172A',
+                    contrastText: '#FFFFFF',
                 },
                 background: {
-                    default: '#0B1121',   // Deep Navy
-                    paper: '#131C31',     // Slightly lighter Navy
+                    default: '#0B0F19',   // Deep Dark
+                    paper: '#111827',     // Card Dark
                 },
                 text: {
                     primary: '#F1F5F9',  // Slate 100
@@ -50,15 +50,15 @@ export const getThemeOptions = (mode) => ({
                 },
             }),
         success: {
-            main: mode === 'light' ? '#10B981' : '#34D399',
+            main: mode === 'light' ? '#10B981' : '#22C55E',
             light: mode === 'light' ? '#D1FAE5' : '#064E3B',
         },
         warning: {
-            main: mode === 'light' ? '#F59E0B' : '#FBBF24',
+            main: mode === 'light' ? '#F59E0B' : '#F59E0B',
             light: mode === 'light' ? '#FEF3C7' : '#78350F',
         },
         error: {
-            main: mode === 'light' ? '#EF4444' : '#F87171',
+            main: mode === 'light' ? '#EF4444' : '#EF4444',
             light: mode === 'light' ? '#FEE2E2' : '#7F1D1D',
         },
         info: {
@@ -171,9 +171,9 @@ export const getThemeOptions = (mode) => ({
                         ? '1px solid rgba(0, 0, 0, 0.06)'
                         : '1px solid rgba(255, 255, 255, 0.06)',
                     background: mode === 'dark'
-                        ? 'linear-gradient(145deg, rgba(19, 28, 49, 0.8) 0%, rgba(11, 17, 33, 0.8) 100%)'
+                        ? 'linear-gradient(145deg, rgba(17, 24, 39, 0.9) 0%, rgba(11, 15, 25, 0.85) 100%)'
                         : '#FFFFFF',
-                    backdropFilter: mode === 'dark' ? 'blur(10px)' : 'none',
+                    backdropFilter: mode === 'dark' ? 'blur(12px)' : 'none',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 },
             },

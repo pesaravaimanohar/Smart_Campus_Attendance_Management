@@ -15,7 +15,7 @@ import {
     refreshSessionQr, endSession, getSessionAttendanceCount,
     getSessionAttendance, updateAttendanceStatus,
     getFacultyDashboard, getSessionHistory, getFacultyClassStats,
-    getSessionReport
+    getSessionReport, crcAPI, bulkUploadAPI
 } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -48,6 +48,9 @@ import {
     EventNote as EventIcon,
     ArrowForward as ArrowIcon,
     Speed as SpeedIcon,
+    CloudUpload as UploadIcon,
+    Download as DownloadIcon,
+    InsertDriveFile as FileIcon,
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import StatsCard from '../components/StatsCard';
@@ -55,6 +58,8 @@ import StatsCard from '../components/StatsCard';
 // ═══════════════════════════════════════════════════════════════
 //  FACULTY DASHBOARD — Complete Attendance System
 // ═══════════════════════════════════════════════════════════════
+const PERIODS = ['Period 1', 'Period 2', 'Period 3', 'Period 4', 'Period 5', 'Period 6'];
+
 const FacultyDashboard = () => {
     const { user } = useAuth();
     const theme = useTheme();
@@ -74,6 +79,8 @@ const FacultyDashboard = () => {
     // ─── Session Form State ────────────────
     const [selectedClass, setSelectedClass] = useState("");
     const [selectedMapping, setSelectedMapping] = useState("");
+    const [selectedPeriod, setSelectedPeriod] = useState("Period 1");
+    const [numberOfHours, setNumberOfHours] = useState(1);
     const [radius, setRadius] = useState(50);
     const [duration, setDuration] = useState(10);
     const [startingSession, setStartingSession] = useState(false);
@@ -109,6 +116,16 @@ const FacultyDashboard = () => {
     // ─── Class Stats ───────────────────────
     const [classStats, setClassStats] = useState([]);
     const [classStatsLoading, setClassStatsLoading] = useState(false);
+
+    // ─── CRC (Class Rep Coordinator) ───────
+    const [crcClasses, setCrcClasses] = useState([]);
+    const [crcLoading, setCrcLoading] = useState(false);
+    const [selectedCrcClass, setSelectedCrcClass] = useState(null);
+    const [crcTab, setCrcTab] = useState('students'); // 'students' | 'subjects' | 'atRisk'
+    const [crcStudents, setCrcStudents] = useState([]);
+    const [crcSubjects, setCrcSubjects] = useState([]);
+    const [crcDefaulters, setCrcDefaulters] = useState([]);
+    const [crcDetailLoading, setCrcDetailLoading] = useState(false);
 
     // ─── Session Report Dialog ─────────────
     const [reportDialog, setReportDialog] = useState(false);
@@ -181,7 +198,8 @@ const FacultyDashboard = () => {
     const uniqueClasses = React.useMemo(() => {
         const map = new Map();
         mappings.forEach(m => {
-            if (!map.has(m.className)) map.set(m.className, { className: m.className, classId: m.classId });
+            const key = `${m.className}-${m.classId}`;
+            if (!map.has(key)) map.set(key, { className: m.className, classId: m.classId });
         });
         return [...map.values()];
     }, [mappings]);
@@ -259,7 +277,17 @@ const FacultyDashboard = () => {
         setStartingSession(true); setLocationError("");
         try {
             const loc = await getLocation();
-            const newSession = await createSession({ mapId: selectedMapping, latitude: loc.latitude, longitude: loc.longitude, duration, radius });
+            const mapping = getSelectedMappingInfo();
+            const newSession = await createSession({ 
+                mapId: selectedMapping, 
+                latitude: loc.latitude, 
+                longitude: loc.longitude, 
+                duration, 
+                radius,
+                period: selectedPeriod,
+                numberOfHours: numberOfHours,
+                isLab: mapping?.isLab || false
+            });
             const normalized = {
                 ...newSession,
                 id: newSession?.id ?? newSession?.sessionId,
@@ -328,6 +356,100 @@ const FacultyDashboard = () => {
         setApproved(false); setSelectedClass(""); setSelectedMapping("");
     };
 
+    // ─── PiP Popup ──────────────────────────
+    const popOutRef = React.useRef(null);
+
+    // Expose live session data on window for the popup to read
+    React.useEffect(() => {
+        window.__pipSessionData = session ? {
+            qrToken: qrValue,
+            attendanceCount,
+            sessionTimer,
+            subjectName: getSelectedMappingInfo()?.subjectName || '',
+            className: getSelectedMappingInfo()?.className || '',
+            active: true,
+        } : { active: false };
+    }, [qrValue, attendanceCount, sessionTimer, session]);
+
+    // Close popup when session ends
+    React.useEffect(() => {
+        if (!session && popOutRef.current && !popOutRef.current.closed) {
+            popOutRef.current.close();
+            popOutRef.current = null;
+        }
+    }, [session]);
+
+    const handlePopOutPiP = () => {
+        if (popOutRef.current && !popOutRef.current.closed) {
+            popOutRef.current.focus();
+            return;
+        }
+        const w = 380, h = 520;
+        const left = window.screenX + window.outerWidth - w - 40;
+        const top = window.screenY + 60;
+        const pip = window.open('', 'qr_pip', `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no`);
+        if (!pip) { alert('Popup blocked! Please allow popups for this site.'); return; }
+        popOutRef.current = pip;
+        pip.document.write(`<!DOCTYPE html>
+<html><head><title>QR Session</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"><\/script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter','Segoe UI',sans-serif; background:#0B0F19; color:#F1F5F9; display:flex; flex-direction:column; align-items:center; height:100vh; padding:20px; }
+  .header { display:flex; align-items:center; gap:8px; margin-bottom:12px; width:100%; }
+  .live-dot { width:10px; height:10px; border-radius:50%; background:#22C55E; animation:blink 1.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .title { font-size:13px; font-weight:700; color:#22C55E; text-transform:uppercase; letter-spacing:1px; }
+  .info { font-size:12px; color:#94A3B8; margin-bottom:16px; text-align:center; }
+  .qr-box { background:#fff; border-radius:16px; padding:16px; margin-bottom:16px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+  .qr-box canvas { display:block; }
+  .token { font-family:monospace; font-size:15px; font-weight:700; color:#6366F1; letter-spacing:2px; margin-bottom:16px; text-align:center; word-break:break-all; }
+  .stats { display:flex; gap:24px; align-items:center; justify-content:center; padding:16px 24px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:12px; width:100%; margin-bottom:12px; }
+  .stat-num { font-size:32px; font-weight:800; }
+  .stat-label { font-size:11px; color:#94A3B8; font-weight:600; }
+  .stat-divider { width:1px; height:40px; background:rgba(255,255,255,0.1); }
+  .refresh-note { font-size:11px; color:#64748B; text-align:center; }
+</style></head><body>
+  <div class="header"><div class="live-dot"></div><span class="title">Session Active</span></div>
+  <div class="info" id="info"></div>
+  <div class="qr-box" id="qrBox"></div>
+  <div class="token" id="token"></div>
+  <div class="stats">
+    <div style="text-align:center"><div class="stat-num" id="count" style="color:#22C55E">0</div><div class="stat-label">Students</div></div>
+    <div class="stat-divider"></div>
+    <div style="text-align:center"><div class="stat-num" id="timer">00:00</div><div class="stat-label">Elapsed</div></div>
+  </div>
+  <div class="refresh-note">🔄 Auto-syncs every 2s · 📍 Geo-fence active</div>
+<script>
+  var lastToken = '';
+  function fmt(s) { return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+  function render(token) {
+    var qr = qrcode(0,'M'); qr.addData(token); qr.make();
+    var size = 220;
+    var el = document.getElementById('qrBox');
+    el.innerHTML = '';
+    var canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+    var ctx = canvas.getContext('2d'); var mc = qr.getModuleCount(); var cs = size/mc;
+    for(var r=0;r<mc;r++) for(var c=0;c<mc;c++) { ctx.fillStyle=qr.isDark(r,c)?'#1a1a2e':'#ffffff'; ctx.fillRect(c*cs,r*cs,cs+1,cs+1); }
+    el.appendChild(canvas);
+  }
+  function sync() {
+    try {
+      var d = window.opener && window.opener.__pipSessionData;
+      if(!d || !d.active) { document.title='Session Ended'; return; }
+      document.getElementById('count').textContent = d.attendanceCount;
+      document.getElementById('timer').textContent = fmt(d.sessionTimer);
+      document.getElementById('token').textContent = d.qrToken;
+      document.getElementById('info').textContent = (d.subjectName||'')+' — '+(d.className||'');
+      document.title = 'QR: '+d.attendanceCount+' students · '+fmt(d.sessionTimer);
+      if(d.qrToken !== lastToken) { render(d.qrToken); lastToken = d.qrToken; }
+    } catch(e) {}
+  }
+  setInterval(sync, 2000); setTimeout(sync, 300);
+<\/script></body></html>`);
+        pip.document.close();
+    };
+
     const presentCount = attendanceRecords.filter(r => r.status === 'PRESENT' || r.status === 'MANUAL_VERIFIED').length;
     const absentCount = attendanceRecords.filter(r => r.status === 'REJECTED').length;
 
@@ -346,10 +468,12 @@ const FacultyDashboard = () => {
         { id: 'dashboard', icon: <DashboardIcon />, label: 'Dashboard' },
         { id: 'divider-1', divider: true },
         { id: 'attendance', icon: <QrCodeIcon />, label: 'Take Attendance', highlight: true, badge: session ? 'LIVE' : null, badgeColor: 'error' },
+        { id: 'bulkupload', icon: <UploadIcon />, label: 'Bulk Upload' },
         { id: 'divider-2', divider: true, label: 'ANALYTICS' },
         { id: 'classes', icon: <ClassIcon />, label: 'My Classes' },
         { id: 'history', icon: <HistoryIcon />, label: 'Session History' },
         { id: 'reports', icon: <AssignmentIcon />, label: 'Reports' },
+        { id: 'crc', icon: <GroupsIcon />, label: 'CRC Dashboard' },
     ];
 
     const currentLabel = menuItems.find(m => m.id === activeSection)?.label || 'Dashboard';
@@ -416,37 +540,34 @@ const FacultyDashboard = () => {
                         <Grid container spacing={3}>
                             {/* Quick Start */}
                             <Grid item xs={12} md={5}>
-                                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', height: '100%' }}>
-                                    <Box sx={{ p: 3, background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`, color: 'white', borderRadius: '12px 12px 0 0' }}>
-                                        <Box display="flex" alignItems="center" gap={1.5}>
-                                            <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 48, height: 48 }}>
-                                                <QrCodeIcon />
-                                            </Avatar>
-                                            <Box>
-                                                <Typography variant="h6" fontWeight={800}>Quick Start</Typography>
-                                                <Typography variant="caption" sx={{ opacity: 0.9 }}>Take attendance in seconds</Typography>
-                                            </Box>
+                                <Card sx={{
+                                    borderRadius: 3, border: '1px solid', borderColor: 'divider',
+                                    height: '100%', overflow: 'hidden',
+                                    background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, isDark ? 0.12 : 0.06)}, ${alpha(theme.palette.secondary.main, isDark ? 0.08 : 0.03)})`,
+                                }}>
+                                    <CardContent sx={{ p: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                                        <Box>
+                                            <Typography variant="subtitle1" fontWeight={700}>Quick Start</Typography>
+                                            <Typography variant="caption" color="text.secondary">Launch a QR attendance session</Typography>
                                         </Box>
-                                    </Box>
-                                    <CardContent sx={{ p: 3 }}>
-                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                            Launch a QR-based attendance session for your class. Students scan the QR code with their phones and their location is automatically verified.
-                                        </Typography>
                                         <Button
-                                            fullWidth variant="contained" size="large"
+                                            variant="contained" size="small"
                                             onClick={() => setActiveSection('attendance')}
                                             startIcon={<PlayIcon />}
-                                            sx={{ py: 1.5, fontWeight: 700, borderRadius: 2, background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`, boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.35)}` }}
+                                            sx={{
+                                                fontWeight: 700, borderRadius: 2, whiteSpace: 'nowrap', px: 2.5,
+                                                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                                                boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+                                            }}
                                         >
-                                            Start Attendance Session
+                                            Take Attendance
                                         </Button>
-                                        {session && (
-                                            <Alert severity="success" sx={{ mt: 2, borderRadius: 2 }}>
-                                                <AlertTitle>Session Active</AlertTitle>
-                                                A session is currently running. <Button size="small" onClick={() => { setActiveSection('attendance'); setQrDialogOpen(true); }}>View QR</Button>
-                                            </Alert>
-                                        )}
                                     </CardContent>
+                                    {session && (
+                                        <Alert severity="success" sx={{ borderRadius: 0, py: 0.5 }}>
+                                            Session active — <Button size="small" onClick={() => { setActiveSection('attendance'); setQrDialogOpen(true); }}>View QR</Button>
+                                        </Alert>
+                                    )}
                                 </Card>
                             </Grid>
 
@@ -481,7 +602,10 @@ const FacultyDashboard = () => {
                                                                 <TableCell>
                                                                     <Box>
                                                                         <Typography variant="body2" fontWeight={600}>{s.subjectName}</Typography>
-                                                                        <Typography variant="caption" color="text.secondary">{s.subjectCode}</Typography>
+                                                                        <Box display="flex" alignItems="center" gap={0.5}>
+                                                                            <Typography variant="caption" color="text.secondary">{s.subjectCode}</Typography>
+                                                                            {s.section === 'LAB' && <Chip label="LAB" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 800, bgcolor: alpha(theme.palette.secondary.main, 0.1), color: 'secondary.main' }} />}
+                                                                        </Box>
                                                                     </Box>
                                                                 </TableCell>
                                                                 <TableCell><Typography variant="body2">{s.className}</Typography></TableCell>
@@ -546,6 +670,7 @@ const FacultyDashboard = () => {
                                 selectedClass={selectedClass}
                                 setSelectedClass={(v) => { setSelectedClass(v); setSelectedMapping(""); }}
                                 selectedMapping={selectedMapping} setSelectedMapping={setSelectedMapping}
+                                selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod}
                                 radius={radius} setRadius={setRadius} duration={duration} setDuration={setDuration}
                                 onStart={handleStartSession} starting={startingSession}
                                 locationError={locationError} gettingLocation={gettingLocation}
@@ -559,12 +684,30 @@ const FacultyDashboard = () => {
                                 session={session} mappingInfo={getSelectedMappingInfo()}
                                 attendanceCount={attendanceCount} sessionTimer={sessionTimer}
                                 formatTimer={formatTimer} onOpenQr={() => setQrDialogOpen(true)}
+                                onPopOut={handlePopOutPiP}
                                 onEnd={handleEndSession} manualRollNo={manualRollNo}
                                 setManualRollNo={setManualRollNo} manualReason={manualReason}
                                 setManualReason={setManualReason} manualMessage={manualMessage}
                                 onManualSubmit={handleManualSubmit} theme={theme} isDark={isDark}
                             />
                         )}
+                    </Box>
+                </Fade>
+            )}
+
+            {/* ══════════════════════════════════════════
+                TAB: BULK UPLOAD
+            ══════════════════════════════════════════ */}
+            {activeSection === 'bulkupload' && (
+                <Fade in timeout={400}>
+                    <Box>
+                        <BulkUploadSection
+                            uniqueClasses={uniqueClasses}
+                            mappings={mappings}
+                            theme={theme}
+                            isDark={isDark}
+                            loading={mappingsLoading}
+                        />
                     </Box>
                 </Fade>
             )}
@@ -692,6 +835,7 @@ const FacultyDashboard = () => {
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>#</TableCell>
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Subject</TableCell>
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Class</TableCell>
+                                                <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Period</TableCell>
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Date & Time</TableCell>
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Present</TableCell>
                                                 <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Status</TableCell>
@@ -709,6 +853,7 @@ const FacultyDashboard = () => {
                                                         </Box>
                                                     </TableCell>
                                                     <TableCell><Typography variant="body2">{s.className} {s.section ? `(${s.section})` : ''}</Typography></TableCell>
+                                                    <TableCell><Chip label={s.period || 'N/A'} size="small" variant="outlined" sx={{ fontWeight: 700, borderRadius: 1.5, borderColor: alpha(theme.palette.primary.main, 0.2), color: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.05) }} /></TableCell>
                                                     <TableCell>
                                                         <Typography variant="body2">{new Date(s.startTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</Typography>
                                                         <Typography variant="caption" color="text.secondary">{new Date(s.startTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Typography>
@@ -820,6 +965,233 @@ const FacultyDashboard = () => {
                 </Fade>
             )}
 
+            {/* ══════════════════════════════════════════
+                TAB: CRC DASHBOARD
+            ══════════════════════════════════════════ */}
+            {activeSection === 'crc' && (
+                <Fade in timeout={400}>
+                    <Box>
+                        <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+                            <Box>
+                                <Typography variant="h5" fontWeight={800}>CRC Dashboard</Typography>
+                                <Typography variant="body2" color="text.secondary">Classes where you are the Class Representative Coordinator</Typography>
+                            </Box>
+                            <IconButton onClick={async () => {
+                                setCrcLoading(true);
+                                try { setCrcClasses(await crcAPI.getMyClasses()); } catch(e) {}
+                                setCrcLoading(false);
+                            }} disabled={crcLoading}><RefreshIcon /></IconButton>
+                        </Box>
+
+                        {/* Load CRC classes on mount */}
+                        {crcClasses.length === 0 && !crcLoading && (() => {
+                            crcAPI.getMyClasses().then(setCrcClasses).catch(() => {});
+                            return null;
+                        })()}
+
+                        {crcLoading ? (
+                            <Grid container spacing={2.5}>
+                                {[1,2].map(i => <Grid item xs={12} sm={6} key={i}><Skeleton variant="rounded" height={160} sx={{ borderRadius: 3 }} /></Grid>)}
+                            </Grid>
+                        ) : crcClasses.length === 0 ? (
+                            <Box textAlign="center" py={8}>
+                                <GroupsIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                                <Typography variant="h6" color="text.secondary">No CRC assignment found</Typography>
+                                <Typography variant="body2" color="text.disabled">Ask your admin to assign you as CRC for a class.</Typography>
+                            </Box>
+                        ) : (
+                            <Grid container spacing={3}>
+                                {/* Left: Class list */}
+                                <Grid item xs={12} md={4}>
+                                    <Stack spacing={1.5}>
+                                        {crcClasses.map(cls => (
+                                            <Card
+                                                key={cls.classId}
+                                                onClick={async () => {
+                                                    setSelectedCrcClass(cls);
+                                                    setCrcTab('students');
+                                                    setCrcDetailLoading(true);
+                                                    try {
+                                                        const [students, subjects, defaulters] = await Promise.all([
+                                                            crcAPI.getClassStudents(cls.classId),
+                                                            crcAPI.getClassSubjects(cls.classId),
+                                                            crcAPI.getClassDefaulters(cls.classId),
+                                                        ]);
+                                                        setCrcStudents(students);
+                                                        setCrcSubjects(subjects);
+                                                        setCrcDefaulters(defaulters);
+                                                    } catch(e) {}
+                                                    setCrcDetailLoading(false);
+                                                }}
+                                                sx={{
+                                                    borderRadius: 3,
+                                                    border: '1px solid',
+                                                    borderColor: selectedCrcClass?.classId === cls.classId ? 'primary.main' : 'divider',
+                                                    cursor: 'pointer',
+                                                    bgcolor: selectedCrcClass?.classId === cls.classId ? alpha(theme.palette.primary.main, 0.06) : 'background.paper',
+                                                    transition: 'all 0.2s',
+                                                    '&:hover': { borderColor: 'primary.main', boxShadow: `0 4px 16px ${alpha(theme.palette.primary.main, 0.15)}` },
+                                                }}
+                                            >
+                                                <CardContent sx={{ p: 2 }}>
+                                                    <Typography variant="subtitle2" fontWeight={700}>{cls.className}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">{cls.department} · {cls.programType}</Typography>
+                                                    <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+                                                        <Chip label={`${cls.totalStudents} Students`} size="small" color="primary" variant="outlined" />
+                                                        <Chip label={`${cls.totalSubjects} Subjects`} size="small" variant="outlined" />
+                                                        <Chip label={`Avg ${cls.avgAttendance}%`} size="small"
+                                                            color={cls.avgAttendance >= 75 ? 'success' : cls.avgAttendance >= 60 ? 'warning' : 'error'}
+                                                            variant="outlined"
+                                                        />
+                                                    </Box>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                    </Stack>
+                                </Grid>
+
+                                {/* Right: Class detail */}
+                                <Grid item xs={12} md={8}>
+                                    {!selectedCrcClass ? (
+                                        <Box textAlign="center" py={8} sx={{ border: '2px dashed', borderColor: 'divider', borderRadius: 3 }}>
+                                            <GroupsIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                                            <Typography variant="h6" color="text.secondary">Select a class to view details</Typography>
+                                        </Box>
+                                    ) : (
+                                        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                            <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <Box>
+                                                    <Typography variant="subtitle1" fontWeight={700}>{selectedCrcClass.className}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">{selectedCrcClass.department}</Typography>
+                                                </Box>
+                                                <Stack direction="row" spacing={1}>
+                                                    {['students','subjects','atRisk'].map(tab => (
+                                                        <Chip
+                                                            key={tab}
+                                                            label={tab === 'atRisk' ? 'At Risk' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                            onClick={() => setCrcTab(tab)}
+                                                            color={crcTab === tab ? 'primary' : 'default'}
+                                                            variant={crcTab === tab ? 'filled' : 'outlined'}
+                                                            size="small"
+                                                            sx={{ fontWeight: 600, textTransform: 'capitalize', cursor: 'pointer' }}
+                                                        />
+                                                    ))}
+                                                </Stack>
+                                            </Box>
+                                            {crcDetailLoading ? (
+                                                <Box textAlign="center" py={6}><CircularProgress /><Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Loading...</Typography></Box>
+                                            ) : (
+                                                <TableContainer sx={{ maxHeight: 420 }}>
+                                                    <Table stickyHeader size="small">
+                                                        {crcTab === 'students' && (
+                                                            <>
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>#</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Roll No</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Attendance</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Status</TableCell>
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {crcStudents.map((s, i) => (
+                                                                        <TableRow key={s.studentId} hover>
+                                                                            <TableCell>{i+1}</TableCell>
+                                                                            <TableCell><Typography variant="body2" fontWeight={600}>{s.rollNumber}</Typography></TableCell>
+                                                                            <TableCell>{s.name}</TableCell>
+                                                                            <TableCell>
+                                                                                <Box display="flex" alignItems="center" gap={1}>
+                                                                                    <LinearProgress variant="determinate" value={Math.min(s.attendancePercentage,100)}
+                                                                                        color={s.attendancePercentage>=75?'success':s.attendancePercentage>=65?'warning':'error'}
+                                                                                        sx={{ width: 70, height: 6, borderRadius: 1 }}
+                                                                                    />
+                                                                                    <Typography variant="caption" fontWeight={700}>{s.attendancePercentage}%</Typography>
+                                                                                </Box>
+                                                                            </TableCell>
+                                                                            <TableCell><Chip label={s.status} size="small" color={s.status==='Safe'?'success':s.status==='At Risk'?'warning':'error'} variant="outlined" sx={{ fontWeight: 600 }} /></TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                    {crcStudents.length === 0 && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>No students enrolled</TableCell></TableRow>}
+                                                                </TableBody>
+                                                            </>
+                                                        )}
+                                                        {crcTab === 'subjects' && (
+                                                            <>
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Subject</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Faculty</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Sessions</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Avg Attendance</TableCell>
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {crcSubjects.map((s) => (
+                                                                        <TableRow key={s.mappingId} hover>
+                                                                            <TableCell>
+                                                                                <Typography variant="body2" fontWeight={600}>{s.subjectName}</Typography>
+                                                                                <Typography variant="caption" color="text.secondary">{s.subjectCode}</Typography>
+                                                                            </TableCell>
+                                                                            <TableCell>{s.facultyName}</TableCell>
+                                                                            <TableCell>{s.totalSessions}</TableCell>
+                                                                            <TableCell>
+                                                                                <Box display="flex" alignItems="center" gap={1}>
+                                                                                    <LinearProgress variant="determinate" value={Math.min(s.avgAttendance,100)}
+                                                                                        color={s.avgAttendance>=75?'success':s.avgAttendance>=50?'warning':'error'}
+                                                                                        sx={{ width: 70, height: 6, borderRadius: 1 }}
+                                                                                    />
+                                                                                    <Typography variant="caption" fontWeight={700}>{s.avgAttendance}%</Typography>
+                                                                                </Box>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                    {crcSubjects.length === 0 && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary' }}>No subjects mapped</TableCell></TableRow>}
+                                                                </TableBody>
+                                                            </>
+                                                        )}
+                                                        {crcTab === 'atRisk' && (
+                                                            <>
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Roll No</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Attendance</TableCell>
+                                                                        <TableCell sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Risk</TableCell>
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {crcDefaulters.map((s) => (
+                                                                        <TableRow key={s.studentId} hover sx={{ bgcolor: alpha(theme.palette.error.main, 0.04) }}>
+                                                                            <TableCell><Typography variant="body2" fontWeight={700} color="error.main">{s.rollNumber}</Typography></TableCell>
+                                                                            <TableCell>{s.name}</TableCell>
+                                                                            <TableCell>
+                                                                                <Box display="flex" alignItems="center" gap={1}>
+                                                                                    <LinearProgress variant="determinate" value={Math.min(s.attendancePercentage,100)}
+                                                                                        color="error" sx={{ width: 70, height: 6, borderRadius: 1 }}
+                                                                                    />
+                                                                                    <Typography variant="caption" fontWeight={700} color="error.main">{s.attendancePercentage}%</Typography>
+                                                                                </Box>
+                                                                            </TableCell>
+                                                                            <TableCell><Chip label={s.status} size="small" color={s.status==='Critical'?'error':'warning'} variant="filled" sx={{ fontWeight: 700 }} /></TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                    {crcDefaulters.length === 0 && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary' }}>🎉 No defaulters! All students are on track.</TableCell></TableRow>}
+                                                                </TableBody>
+                                                            </>
+                                                        )}
+                                                    </Table>
+                                                </TableContainer>
+                                            )}
+                                        </Card>
+                                    )}
+                                </Grid>
+                            </Grid>
+                        )}
+                    </Box>
+                </Fade>
+            )}
+
             {/* QR POPUP DIALOG */}
             <QrPopupDialog
                 open={qrDialogOpen} onClose={() => setQrDialogOpen(false)}
@@ -898,89 +1270,156 @@ const FacultyDashboard = () => {
 // ═══════════════════════════════════════════════════════════════════════
 function StartSessionForm({
     uniqueClasses, filteredSubjects, selectedClass, setSelectedClass,
-    selectedMapping, setSelectedMapping, radius, setRadius,
-    duration, setDuration, onStart, starting, locationError,
+    selectedMapping, setSelectedMapping, selectedPeriod, setSelectedPeriod, 
+    radius, setRadius, duration, setDuration, onStart, starting, locationError,
     gettingLocation, loading, theme, isDark
 }) {
+    const stepBoxSx = (color) => ({
+        p: 2.5,
+        borderRadius: 3,
+        bgcolor: alpha(color, isDark ? 0.06 : 0.03),
+        border: '1px solid',
+        borderColor: alpha(color, isDark ? 0.15 : 0.1),
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+    });
+
     return (
-        <Card sx={{ borderRadius: 4, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ px: 3, py: 2.5, background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`, color: 'white' }}>
-                <Box display="flex" alignItems="center" gap={1.5}>
-                    <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 44, height: 44 }}><PlayIcon /></Avatar>
-                    <Box>
-                        <Typography variant="h6" fontWeight={800}>Start Attendance Session</Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.9 }}>Configure and launch a new QR attendance session</Typography>
-                    </Box>
+        <Card sx={{ borderRadius: 3, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+            {/* Compact Header */}
+            <Box sx={{
+                px: 3, py: 2,
+                borderBottom: '1px solid', borderColor: 'divider',
+                display: 'flex', alignItems: 'center', gap: 1.5,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, isDark ? 0.1 : 0.05)}, ${alpha(theme.palette.secondary.main, isDark ? 0.06 : 0.02)})`,
+            }}>
+                <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.15), color: 'primary.main', width: 36, height: 36 }}>
+                    <PlayIcon fontSize="small" />
+                </Avatar>
+                <Box>
+                    <Typography variant="subtitle1" fontWeight={700}>Start Attendance Session</Typography>
+                    <Typography variant="caption" color="text.secondary">Configure and launch a QR session</Typography>
                 </Box>
             </Box>
-            <CardContent sx={{ p: { xs: 2.5, md: 4 } }}>
+
+            <CardContent sx={{ p: 3 }}>
                 {loading ? (
-                    <Box textAlign="center" py={4}><CircularProgress size={40} /><Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Loading your classes...</Typography></Box>
+                    <Box textAlign="center" py={4}><CircularProgress size={36} /><Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Loading classes...</Typography></Box>
                 ) : uniqueClasses.length === 0 ? (
-                    <Alert severity="info" sx={{ borderRadius: 2 }}><AlertTitle>No Classes Assigned</AlertTitle>You don't have any classes assigned yet. Contact your admin or HOD.</Alert>
+                    <Alert severity="info" sx={{ borderRadius: 2 }}><AlertTitle>No Classes Assigned</AlertTitle>Contact your admin or HOD to get class assignments.</Alert>
                 ) : (
-                    <Grid container spacing={3}>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, isDark ? 0.08 : 0.04), border: '1px solid', borderColor: alpha(theme.palette.primary.main, 0.15) }}>
-                                <Box display="flex" alignItems="center" gap={1} mb={2}>
-                                    <Chip label="1" size="small" color="primary" sx={{ fontWeight: 700 }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>Select Class</Typography>
+                    <Box>
+                        {/* Step 1 & 2: Class + Subject */}
+                        <Grid container spacing={2} sx={{ mb: 2 }}>
+                            <Grid item xs={12} sm={3}>
+                                <Box sx={stepBoxSx(theme.palette.primary.main)}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                                        <Chip label="1" size="small" color="primary" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 } }} />
+                                        <Typography variant="body2" fontWeight={700}>Select Class</Typography>
+                                    </Box>
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Choose class</InputLabel>
+                                        <Select value={selectedClass} label="Choose class" onChange={(e) => setSelectedClass(e.target.value)} sx={{ borderRadius: 2 }}>
+                                            {uniqueClasses.map(c => (<MenuItem key={c.classId} value={c.className}>{c.className}</MenuItem>))}
+                                        </Select>
+                                    </FormControl>
                                 </Box>
-                                <FormControl fullWidth size="small">
-                                    <InputLabel>Choose your class</InputLabel>
-                                    <Select value={selectedClass} label="Choose your class" onChange={(e) => setSelectedClass(e.target.value)} sx={{ borderRadius: 2 }}>
-                                        {uniqueClasses.map(c => (<MenuItem key={c.classId} value={c.className}><Box display="flex" alignItems="center" gap={1}><ClassIcon fontSize="small" color="primary" />{c.className}</Box></MenuItem>))}
-                                    </Select>
-                                </FormControl>
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: alpha(theme.palette.secondary.main, isDark ? 0.08 : 0.04), border: '1px solid', borderColor: alpha(theme.palette.secondary.main, 0.15), opacity: selectedClass ? 1 : 0.5, transition: 'opacity 0.3s' }}>
-                                <Box display="flex" alignItems="center" gap={1} mb={2}>
-                                    <Chip label="2" size="small" color="secondary" sx={{ fontWeight: 700 }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>Select Subject</Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <Box sx={{ ...stepBoxSx(theme.palette.secondary.main), opacity: selectedClass ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                                        <Chip label="2" size="small" color="secondary" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 } }} />
+                                        <Typography variant="body2" fontWeight={700}>Select Subject</Typography>
+                                    </Box>
+                                    <FormControl fullWidth size="small" disabled={!selectedClass}>
+                                        <InputLabel>Choose subject</InputLabel>
+                                        <Select value={selectedMapping} label="Choose subject" onChange={(e) => setSelectedMapping(e.target.value)} sx={{ borderRadius: 2 }}>
+                                            {filteredSubjects.map(m => (<MenuItem key={m.id} value={m.id}>{m.subjectName} ({m.subjectCode})</MenuItem>))}
+                                        </Select>
+                                    </FormControl>
                                 </Box>
-                                <FormControl fullWidth size="small" disabled={!selectedClass}>
-                                    <InputLabel>Choose subject</InputLabel>
-                                    <Select value={selectedMapping} label="Choose subject" onChange={(e) => setSelectedMapping(e.target.value)} sx={{ borderRadius: 2 }}>
-                                        {filteredSubjects.map(m => (<MenuItem key={m.id} value={m.id}><Box display="flex" alignItems="center" gap={1}><SchoolIcon fontSize="small" color="secondary" />{m.subjectName}<Chip label={m.subjectCode} size="small" variant="outlined" sx={{ ml: 'auto' }} /></Box></MenuItem>))}
-                                    </Select>
-                                </FormControl>
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: alpha(theme.palette.success.main, isDark ? 0.08 : 0.04), border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.15) }}>
-                                <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                    <Chip label="3" size="small" color="success" sx={{ fontWeight: 700 }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>Geo-Fence Radius</Typography>
-                                    <Chip label={`${radius}m`} size="small" color="success" variant="outlined" sx={{ ml: 'auto', fontWeight: 700 }} />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <Box sx={{ ...stepBoxSx(theme.palette.info.main), opacity: selectedMapping ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                                        <Chip label="3" size="small" color="info" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 } }} />
+                                        <Typography variant="body2" fontWeight={700}>Select Period</Typography>
+                                    </Box>
+                                    <FormControl fullWidth size="small" disabled={!selectedMapping}>
+                                        <InputLabel>Choose period</InputLabel>
+                                        <Select value={selectedPeriod} label="Choose period" onChange={(e) => setSelectedPeriod(e.target.value)} sx={{ borderRadius: 2 }}>
+                                            {PERIODS.map(p => (<MenuItem key={p} value={p}>{p}</MenuItem>))}
+                                        </Select>
+                                    </FormControl>
                                 </Box>
-                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Students must be within this radius</Typography>
-                                <Slider value={radius} onChange={(_, v) => setRadius(v)} min={10} max={500} step={10} valueLabelDisplay="auto" valueLabelFormat={(v) => `${v}m`} color="success" marks={[{ value: 50, label: '50m' }, { value: 100, label: '100m' }, { value: 250, label: '250m' }, { value: 500, label: '500m' }]} />
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: alpha(theme.palette.warning.main, isDark ? 0.08 : 0.04), border: '1px solid', borderColor: alpha(theme.palette.warning.main, 0.15) }}>
-                                <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                    <Chip label="4" size="small" color="warning" sx={{ fontWeight: 700 }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>Session Duration</Typography>
-                                    <Chip label={`${duration} min`} size="small" color="warning" variant="outlined" sx={{ ml: 'auto', fontWeight: 700 }} />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <Box sx={{ ...stepBoxSx(theme.palette.primary.light), opacity: selectedMapping ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                                        <Chip label="4" size="small" color="primary" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 }, bgcolor: theme.palette.primary.light }} />
+                                        <Typography variant="body2" fontWeight={700}>Number of Hours</Typography>
+                                    </Box>
+                                    <FormControl fullWidth size="small" disabled={!selectedMapping}>
+                                        <InputLabel>Choose hours</InputLabel>
+                                        <Select value={numberOfHours} label="Choose hours" onChange={(e) => setNumberOfHours(e.target.value)} sx={{ borderRadius: 2 }}>
+                                            {[1, 2, 3].map(h => (<MenuItem key={h} value={h}>{h} Hour{h > 1 ? 's' : ''}</MenuItem>))}
+                                        </Select>
+                                    </FormControl>
                                 </Box>
-                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>How long should the session accept responses?</Typography>
-                                <Slider value={duration} onChange={(_, v) => setDuration(v)} min={1} max={60} step={1} valueLabelDisplay="auto" valueLabelFormat={(v) => `${v} min`} color="warning" marks={[{ value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60m' }]} />
-                            </Box>
+                            </Grid>
                         </Grid>
-                        {locationError && (<Grid item xs={12}><Alert severity="error" sx={{ borderRadius: 2 }}><AlertTitle>Error</AlertTitle>{locationError}</Alert></Grid>)}
-                        <Grid item xs={12}>
-                            <Button fullWidth variant="contained" size="large" onClick={onStart} disabled={!selectedMapping || starting}
-                                startIcon={starting ? <CircularProgress size={20} color="inherit" /> : <PlayIcon />}
-                                sx={{ py: 2, fontSize: '1.1rem', fontWeight: 800, borderRadius: 3, background: selectedMapping ? `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` : undefined, boxShadow: selectedMapping ? `0 8px 24px ${alpha(theme.palette.primary.main, 0.4)}` : undefined }}
-                            >
-                                {starting ? 'Getting Location & Starting...' : 'Launch Attendance Session'}
-                            </Button>
-                            <Typography variant="caption" color="text.secondary" textAlign="center" display="block" sx={{ mt: 1 }}>📍 Your current GPS location will be captured as the attendance center</Typography>
+
+                        {/* Step 3 & 4: Radius + Duration */}
+                        <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                            <Grid item xs={12} sm={6}>
+                                <Box sx={stepBoxSx(theme.palette.success.main)}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                                        <Chip label="5" size="small" color="success" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 } }} />
+                                        <Typography variant="body2" fontWeight={700}>Geo-Fence Radius</Typography>
+                                        <Chip label={`${radius}m`} size="small" color="success" variant="outlined" sx={{ ml: 'auto', fontWeight: 700, height: 22 }} />
+                                    </Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Students must be within this radius</Typography>
+                                    <Slider value={radius} onChange={(_, v) => setRadius(v)} min={10} max={500} step={10} valueLabelDisplay="auto" valueLabelFormat={(v) => `${v}m`} color="success" size="small" marks={[{ value: 50, label: '50m' }, { value: 250, label: '250m' }, { value: 500, label: '500m' }]} />
+                                </Box>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Box sx={stepBoxSx(theme.palette.warning.main)}>
+                                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                                        <Chip label="6" size="small" color="warning" sx={{ fontWeight: 700, height: 22, width: 22, '& .MuiChip-label': { px: 0 } }} />
+                                        <Typography variant="body2" fontWeight={700}>Session Duration</Typography>
+                                        <Chip label={`${duration} min`} size="small" color="warning" variant="outlined" sx={{ ml: 'auto', fontWeight: 700, height: 22 }} />
+                                    </Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>How long to accept responses</Typography>
+                                    <Slider value={duration} onChange={(_, v) => setDuration(v)} min={1} max={60} step={1} valueLabelDisplay="auto" valueLabelFormat={(v) => `${v}m`} color="warning" size="small" marks={[{ value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }, { value: 60, label: '60m' }]} />
+                                </Box>
+                            </Grid>
                         </Grid>
-                    </Grid>
+
+                        {/* Error */}
+                        {locationError && (<Alert severity="error" sx={{ borderRadius: 2, mb: 2 }}>{locationError}</Alert>)}
+
+                        {/* Launch Button */}
+                        <Button
+                            fullWidth variant="contained" size="large" onClick={onStart}
+                            disabled={!selectedMapping || starting}
+                            startIcon={starting ? <CircularProgress size={18} color="inherit" /> : <PlayIcon />}
+                            sx={{
+                                py: 1.5, fontWeight: 800, borderRadius: 2.5, fontSize: '1rem',
+                                background: selectedMapping
+                                    ? `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+                                    : undefined,
+                                boxShadow: selectedMapping
+                                    ? `0 6px 20px ${alpha(theme.palette.primary.main, 0.35)}`
+                                    : undefined,
+                            }}
+                        >
+                            {starting ? 'Getting Location...' : 'Launch Session'}
+                        </Button>
+                        <Typography variant="caption" color="text.secondary" textAlign="center" display="block" sx={{ mt: 1 }}>
+                            📍 Your GPS location will be captured as the attendance center
+                        </Typography>
+                    </Box>
                 )}
             </CardContent>
         </Card>
@@ -990,7 +1429,7 @@ function StartSessionForm({
 // ═══════════════════════════════════════════════════════════════════════
 //  ACTIVE SESSION PANEL
 // ═══════════════════════════════════════════════════════════════════════
-function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTimer, formatTimer, onOpenQr, onEnd, manualRollNo, setManualRollNo, manualReason, setManualReason, manualMessage, onManualSubmit, theme, isDark }) {
+function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTimer, formatTimer, onOpenQr, onPopOut, onEnd, manualRollNo, setManualRollNo, manualReason, setManualReason, manualMessage, onManualSubmit, theme, isDark }) {
     return (
         <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
@@ -1010,6 +1449,7 @@ function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTime
                                     <Box display="flex" alignItems="center" gap={0.5}><Typography variant="body2" fontWeight={600}>{mappingInfo.subjectName}</Typography><Chip label={mappingInfo.subjectCode} size="small" variant="outlined" /></Box>
                                 </Box>
                                 <Box display="flex" justifyContent="space-between"><Typography variant="caption" color="text.secondary">Class</Typography><Typography variant="body2" fontWeight={600}>{mappingInfo.className}</Typography></Box>
+                                <Box display="flex" justifyContent="space-between"><Typography variant="caption" color="text.secondary">Period</Typography><Typography variant="body2" fontWeight={700} color="primary.main">{session.period || "N/A"}</Typography></Box>
                                 <Box display="flex" justifyContent="space-between"><Typography variant="caption" color="text.secondary">Students Marked</Typography><Chip label={attendanceCount} size="small" color="primary" sx={{ fontWeight: 700 }} /></Box>
                             </Stack>
                         )}
@@ -1035,7 +1475,10 @@ function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTime
                         <Typography variant="body2" fontWeight={700} color="primary" sx={{ mb: 1, letterSpacing: 1 }}>{session.qrToken}</Typography>
                         <Typography variant="caption" color="text.secondary" textAlign="center" mb={2}>Auto-refreshes every 10s for security</Typography>
                         <Stack spacing={1.5} width="100%">
-                            <Button variant="contained" fullWidth onClick={onOpenQr} startIcon={<FullscreenIcon />} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2, background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>Pop Out QR (Full Screen)</Button>
+                            <Stack direction="row" spacing={1.5}>
+                                <Button variant="contained" fullWidth onClick={onOpenQr} startIcon={<FullscreenIcon />} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2, background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>Full Screen</Button>
+                                <Button variant="contained" fullWidth onClick={onPopOut} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2, background: `linear-gradient(135deg, ${theme.palette.warning.main}, #F97316)`, color: '#000' }}>Pop Out ↗</Button>
+                            </Stack>
                             <Button variant="outlined" color="error" fullWidth onClick={onEnd} startIcon={<StopCircleIcon />} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2 }}>End Session & Review</Button>
                         </Stack>
                     </CardContent>
@@ -1159,6 +1602,318 @@ function ReviewPanel({ attendanceRecords, loadingRecords, presentCount, absentCo
                 </Box>
             </CardContent>
         </Card>
+    );
+}
+// ═══════════════════════════════════════════════════════════════════════
+//  BULK UPLOAD SECTION
+// ═══════════════════════════════════════════════════════════════════════
+function BulkUploadSection({ uniqueClasses, mappings, theme, isDark, loading }) {
+    const [selectedClass, setSelectedClass] = React.useState("");
+    const [selectedMapping, setSelectedMapping] = React.useState("");
+    const [file, setFile] = React.useState(null);
+    const [dragOver, setDragOver] = React.useState(false);
+    const [validating, setValidating] = React.useState(false);
+    const [validationResult, setValidationResult] = React.useState(null);
+    const [confirming, setConfirming] = React.useState(false);
+    const [confirmed, setConfirmed] = React.useState(false);
+    const [confirmCount, setConfirmCount] = React.useState(0);
+    const fileInputRef = React.useRef(null);
+
+    const filteredSubjects = React.useMemo(() => {
+        if (!selectedClass) return [];
+        return mappings.filter(m => m.className === selectedClass);
+    }, [selectedClass, mappings]);
+
+    const handleFileSelect = (f) => {
+        if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.xls'))) {
+            setFile(f);
+            setValidationResult(null);
+            setConfirmed(false);
+        }
+    };
+
+    const handleValidate = async () => {
+        if (!file || !selectedMapping) return;
+        setValidating(true);
+        setValidationResult(null);
+        try {
+            const result = await bulkUploadAPI.validateMonthlyAttendance(file, selectedMapping);
+            setValidationResult(result);
+        } catch (err) {
+            setValidationResult({ error: err.response?.data?.message || err.message });
+        }
+        setValidating(false);
+    };
+
+    const handleConfirm = async () => {
+        if (!validationResult?.uploadLogId) return;
+        setConfirming(true);
+        try {
+            const count = await bulkUploadAPI.confirmMonthlyAttendance(validationResult.uploadLogId, selectedMapping);
+            setConfirmCount(count);
+            setConfirmed(true);
+        } catch (err) {
+            alert("Import failed: " + (err.response?.data?.message || err.message));
+        }
+        setConfirming(false);
+    };
+
+    const handleDownloadTemplate = () => {
+        // Generate a simple CSV template
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = today.getMonth() + 1;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const dates = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+            const day = new Date(year, month - 1, d);
+            if (day.getDay() !== 0) { // Skip Sundays
+                dates.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+            }
+        }
+        let csv = "Roll No," + dates.join(",") + "\n";
+        csv += "EXAMPLE001," + dates.map(() => "P").join(",") + "\n";
+        csv += "EXAMPLE002," + dates.map(() => "A").join(",") + "\n";
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_template_${year}_${String(month).padStart(2, '0')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleReset = () => {
+        setFile(null);
+        setValidationResult(null);
+        setConfirmed(false);
+        setConfirmCount(0);
+    };
+
+    return (
+        <Stack spacing={3}>
+            {/* Header */}
+            <Box>
+                <Typography variant="h5" fontWeight={800}>Bulk Attendance Upload</Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Upload a month's attendance in Excel format — rows are students, columns are dates
+                </Typography>
+            </Box>
+
+            {/* Step 1 & 2: Select Class + Subject */}
+            <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.15), color: 'primary.main', width: 32, height: 32 }}>
+                        <ClassIcon fontSize="small" />
+                    </Avatar>
+                    <Typography variant="subtitle1" fontWeight={700}>Select Class & Subject</Typography>
+                </Box>
+                <CardContent sx={{ p: 3 }}>
+                    {loading ? (
+                        <Box textAlign="center" py={3}><CircularProgress size={32} /></Box>
+                    ) : (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>Class</InputLabel>
+                                    <Select value={selectedClass} label="Class" onChange={(e) => { setSelectedClass(e.target.value); setSelectedMapping(""); setValidationResult(null); setConfirmed(false); }} sx={{ borderRadius: 2 }}>
+                                        {uniqueClasses.map(c => <MenuItem key={c.classId} value={c.className}>{c.className}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth size="small" disabled={!selectedClass}>
+                                    <InputLabel>Subject</InputLabel>
+                                    <Select value={selectedMapping} label="Subject" onChange={(e) => { setSelectedMapping(e.target.value); setValidationResult(null); setConfirmed(false); }} sx={{ borderRadius: 2 }}>
+                                        {filteredSubjects.map(m => <MenuItem key={m.id} value={m.id}>{m.subjectName} ({m.subjectCode})</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        </Grid>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Step 3: Upload File */}
+            {selectedMapping && (
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box display="flex" alignItems="center" gap={1.5}>
+                            <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.15), color: 'success.main', width: 32, height: 32 }}>
+                                <UploadIcon fontSize="small" />
+                            </Avatar>
+                            <Typography variant="subtitle1" fontWeight={700}>Upload Attendance File</Typography>
+                        </Box>
+                        <Button size="small" startIcon={<DownloadIcon />} onClick={handleDownloadTemplate} sx={{ borderRadius: 2, fontWeight: 600 }}>
+                            Download Template
+                        </Button>
+                    </Box>
+                    <CardContent sx={{ p: 3 }}>
+                        {/* Format Info */}
+                        <Alert severity="info" sx={{ borderRadius: 2, mb: 2.5 }}>
+                            <AlertTitle>Excel Format</AlertTitle>
+                            <strong>Row 1 (header):</strong> Roll No | 2026-05-01 | 2026-05-02 | ... | 2026-05-31<br />
+                            <strong>Row 2+:</strong> Student roll numbers with P (Present) or A (Absent) in each date column.<br />
+                            Supported: <strong>.xlsx</strong> files. Date format: <strong>YYYY-MM-DD</strong> or <strong>DD/MM/YYYY</strong>.
+                        </Alert>
+
+                        {/* Drop Zone */}
+                        <Box
+                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
+                            onClick={() => fileInputRef.current?.click()}
+                            sx={{
+                                p: 4, borderRadius: 3, textAlign: 'center', cursor: 'pointer',
+                                border: '2px dashed',
+                                borderColor: dragOver ? 'primary.main' : file ? 'success.main' : 'divider',
+                                bgcolor: dragOver ? alpha(theme.palette.primary.main, 0.05)
+                                    : file ? alpha(theme.palette.success.main, 0.04) : 'transparent',
+                                transition: 'all 0.2s',
+                                '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.03) },
+                            }}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".xlsx,.xls"
+                                style={{ display: 'none' }}
+                                onChange={(e) => handleFileSelect(e.target.files[0])}
+                            />
+                            {file ? (
+                                <Box>
+                                    <FileIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+                                    <Typography variant="body1" fontWeight={700} color="success.main">{file.name}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{(file.size / 1024).toFixed(1)} KB — Click to change</Typography>
+                                </Box>
+                            ) : (
+                                <Box>
+                                    <UploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                                    <Typography variant="body1" fontWeight={600}>Drop your Excel file here</Typography>
+                                    <Typography variant="caption" color="text.secondary">or click to browse — .xlsx only</Typography>
+                                </Box>
+                            )}
+                        </Box>
+
+                        {/* Validate Button */}
+                        {file && !validationResult && (
+                            <Button
+                                fullWidth variant="contained" size="large" sx={{ mt: 2.5, py: 1.5, fontWeight: 700, borderRadius: 2.5 }}
+                                onClick={handleValidate} disabled={validating}
+                                startIcon={validating ? <CircularProgress size={18} color="inherit" /> : <SearchIcon />}
+                            >
+                                {validating ? 'Validating...' : 'Validate & Preview'}
+                            </Button>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Validation Result */}
+            {validationResult && !validationResult.error && (
+                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Avatar sx={{ bgcolor: alpha(theme.palette.warning.main, 0.15), color: 'warning.main', width: 32, height: 32 }}>
+                            <ChartIcon fontSize="small" />
+                        </Avatar>
+                        <Typography variant="subtitle1" fontWeight={700}>Validation Results</Typography>
+                        <Chip label={validationResult.fileName} size="small" variant="outlined" sx={{ ml: 'auto' }} />
+                    </Box>
+                    <CardContent sx={{ p: 3 }}>
+                        {/* Stats */}
+                        <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                            <Grid item xs={6} sm={3}>
+                                <Paper sx={{ p: 2, borderRadius: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, isDark ? 0.08 : 0.04) }}>
+                                    <Typography variant="h5" fontWeight={800} color="primary">{validationResult.totalStudents}</Typography>
+                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Students</Typography>
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                                <Paper sx={{ p: 2, borderRadius: 2, textAlign: 'center', bgcolor: alpha(theme.palette.success.main, isDark ? 0.08 : 0.04) }}>
+                                    <Typography variant="h5" fontWeight={800} color="success.main">{validationResult.presentCount}</Typography>
+                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Present</Typography>
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                                <Paper sx={{ p: 2, borderRadius: 2, textAlign: 'center', bgcolor: alpha(theme.palette.error.main, isDark ? 0.08 : 0.04) }}>
+                                    <Typography variant="h5" fontWeight={800} color="error.main">{validationResult.absentCount}</Typography>
+                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Absent</Typography>
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                                <Paper sx={{ p: 2, borderRadius: 2, textAlign: 'center', bgcolor: alpha(theme.palette.warning.main, isDark ? 0.08 : 0.04) }}>
+                                    <Typography variant="h5" fontWeight={800} color="warning.main">{validationResult.dates?.length || 0}</Typography>
+                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>Days</Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+
+                        {/* Dates parsed */}
+                        {validationResult.dates?.length > 0 && (
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.5}>Dates Detected:</Typography>
+                                <Box display="flex" gap={0.5} flexWrap="wrap">
+                                    {validationResult.dates.map(d => <Chip key={d} label={d} size="small" variant="outlined" sx={{ fontSize: 11 }} />)}
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* Errors */}
+                        {validationResult.errors?.length > 0 && (
+                            <Alert severity="warning" sx={{ borderRadius: 2, mb: 2 }}>
+                                <AlertTitle>{validationResult.errors.length} Validation Warning(s)</AlertTitle>
+                                <Box sx={{ maxHeight: 150, overflow: 'auto', fontSize: 12 }}>
+                                    {validationResult.errors.slice(0, 20).map((e, i) => (
+                                        <Typography key={i} variant="caption" display="block">
+                                            Row {e.rowNumber} [{e.field}]: {e.message}
+                                        </Typography>
+                                    ))}
+                                    {validationResult.errors.length > 20 && (
+                                        <Typography variant="caption" fontWeight={700}>... and {validationResult.errors.length - 20} more</Typography>
+                                    )}
+                                </Box>
+                            </Alert>
+                        )}
+
+                        {/* Confirm / Status */}
+                        {confirmed ? (
+                            <Alert severity="success" sx={{ borderRadius: 2 }}>
+                                <AlertTitle>Import Complete!</AlertTitle>
+                                Successfully imported <strong>{confirmCount}</strong> attendance records.
+                                <Button size="small" onClick={handleReset} sx={{ ml: 2 }}>Upload Another</Button>
+                            </Alert>
+                        ) : validationResult.validRecords > 0 ? (
+                            <Stack direction="row" spacing={2}>
+                                <Button
+                                    variant="contained" color="success" size="large" onClick={handleConfirm}
+                                    disabled={confirming}
+                                    startIcon={confirming ? <CircularProgress size={18} color="inherit" /> : <CheckCircleIcon />}
+                                    sx={{ py: 1.5, px: 4, fontWeight: 800, borderRadius: 2.5, boxShadow: `0 6px 20px ${alpha(theme.palette.success.main, 0.35)}` }}
+                                >
+                                    {confirming ? 'Importing...' : `Confirm & Import ${validationResult.validRecords} Records`}
+                                </Button>
+                                <Button variant="outlined" onClick={handleReset} sx={{ borderRadius: 2.5 }}>Cancel</Button>
+                            </Stack>
+                        ) : (
+                            <Alert severity="error" sx={{ borderRadius: 2 }}>
+                                No valid records to import. Fix the errors above and re-upload.
+                                <Button size="small" onClick={handleReset} sx={{ ml: 2 }}>Try Again</Button>
+                            </Alert>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Error result */}
+            {validationResult?.error && (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                    <AlertTitle>Upload Failed</AlertTitle>
+                    {validationResult.error}
+                    <Button size="small" onClick={handleReset} sx={{ ml: 2 }}>Try Again</Button>
+                </Alert>
+            )}
+        </Stack>
     );
 }
 

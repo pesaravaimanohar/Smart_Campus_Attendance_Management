@@ -148,7 +148,12 @@ const ScanAttendance = ({ onBack }) => {
         setLoading(true);
         setError(null);
         try {
-            const info = await getSessionInfoByQr(token);
+            // Simultaneously fetch session info and location if not already available
+            const [info] = await Promise.all([
+                getSessionInfoByQr(token),
+                !userLocation ? getUserLocation().catch(e => console.warn("Background location fetch failed:", e)) : Promise.resolve(null)
+            ]);
+            
             setSessionInfo(info);
             console.log("Session info loaded:", info);
         } catch (e) {
@@ -166,9 +171,24 @@ const ScanAttendance = ({ onBack }) => {
 
     // Mark attendance
     const handleMarkAttendance = async () => {
-        if (!scannedToken || !userLocation) {
-            setError("Cannot mark attendance: missing token or location data.");
+        if (!scannedToken) {
+            setError("Missing QR token. Please scan again.");
             return;
+        }
+
+        let currentLoc = userLocation;
+        
+        // If location is missing, try fetching it one last time
+        if (!currentLoc) {
+            setLoading(true);
+            try {
+                console.log("Location missing on submit, retrying...");
+                currentLoc = await getUserLocation();
+            } catch (e) {
+                setError("Location verification is required to mark attendance. Please enable GPS and try again.");
+                setLoading(false);
+                return;
+            }
         }
 
         setLoading(true);
@@ -177,8 +197,8 @@ const ScanAttendance = ({ onBack }) => {
             console.log("Marking attendance...");
             const response = await markQrAttendance({
                 qrToken: scannedToken,
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude
+                latitude: currentLoc.latitude,
+                longitude: currentLoc.longitude
             });
             console.log("Marking response:", response);
             setResult(response);
@@ -382,7 +402,7 @@ const ScanAttendance = ({ onBack }) => {
                     )}
 
                     {/* DATA ENRICHED - SESSION INFO FOUND */}
-                    {scannedToken && sessionInfo && !result && (
+                    {scannedToken && sessionInfo && !result && !error && (
                         <Fade in timeout={400}>
                             <Card sx={{ borderRadius: 4, overflow: 'hidden', border: '1px solid', borderColor: 'primary.light' }}>
                                 <Box sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -409,27 +429,22 @@ const ScanAttendance = ({ onBack }) => {
                                             <Box>
                                                 <Typography variant="subtitle2" fontWeight={800}>Location Verification</Typography>
                                                 <Typography variant="body2" color="text.secondary">
-                                                    {userLocation ? `Detected: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Waiting for GPS...'}
+                                                    {locationLoading ? 'Updating GPS location...' : (userLocation ? `Detected: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Waiting for GPS...')}
                                                 </Typography>
                                             </Box>
                                         </Box>
-
-                                        {error && (
-                                            <Alert severity="error" icon={<ErrorIcon />} sx={{ borderRadius: 2 }}>
-                                                {error}
-                                            </Alert>
-                                        )}
 
                                         <Box sx={{ display: 'flex', gap: 2, pt: 1 }}>
                                             <Button variant="outlined" fullWidth onClick={onCancel} sx={{ borderRadius: 2, fontWeight: 700 }}>
                                                 Cancel
                                             </Button>
                                             <Button
-                                                variant="contained" fullWidth onClick={handleMarkAttendance} disabled={loading}
+                                                variant="contained" fullWidth onClick={handleMarkAttendance} 
+                                                disabled={loading || locationLoading}
                                                 startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <ApproveIcon />}
                                                 sx={{ borderRadius: 2, fontWeight: 700, px: 4 }}
                                             >
-                                                {loading ? "Verifying..." : "Mark Attendance"}
+                                                {loading ? "Verifying..." : (locationLoading ? "Locating..." : "Mark Attendance")}
                                             </Button>
                                         </Box>
                                     </Stack>
@@ -449,13 +464,16 @@ const ScanAttendance = ({ onBack }) => {
 
                     {/* ERROR STATE WITH RETRY */}
                     {scannedToken && error && !result && !loading && (
-                         <Box sx={{ textAlign: 'center', py: 4 }}>
-                            <Avatar sx={{ bgcolor: alpha(theme.palette.error.main, 0.1), color: 'error.main', width: 64, height: 64, mx: 'auto', mb: 2 }}>
-                                <CloseIcon fontSize="large" />
+                         <Box sx={{ textAlign: 'center', py: 6 }}>
+                            <Avatar sx={{ bgcolor: alpha(theme.palette.error.main, 0.1), color: 'error.main', width: 72, height: 72, mx: 'auto', mb: 3 }}>
+                                <WarningIcon fontSize="large" />
                             </Avatar>
-                            <Typography variant="h6" fontWeight={800}>Oops! Something went wrong</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>{error}</Typography>
-                            <Button variant="contained" onClick={onCancel} sx={{ borderRadius: 2 }}>Try Again</Button>
+                            <Typography variant="h5" fontWeight={800} gutterBottom>Verification Failed</Typography>
+                            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>{error}</Typography>
+                            <Stack direction="row" spacing={2} justifyContent="center">
+                                <Button variant="outlined" onClick={onCancel} sx={{ borderRadius: 2, px: 4 }}>Cancel</Button>
+                                <Button variant="contained" onClick={() => { setError(null); handleMarkAttendance(); }} sx={{ borderRadius: 2, px: 4 }}>Try Again</Button>
+                            </Stack>
                          </Box>
                     )}
 

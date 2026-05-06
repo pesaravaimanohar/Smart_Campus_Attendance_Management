@@ -61,6 +61,7 @@ public class PermissionMatrix {
         ATTENDANCE_VIEW_ALL,
         ATTENDANCE_UPDATE,
         ATTENDANCE_DELETE,
+        ATTENDANCE_BULK_UPLOAD,
 
         // Audit
         AUDIT_READ,
@@ -112,6 +113,7 @@ public class PermissionMatrix {
 
                 // Attendance
                 Permission.ATTENDANCE_VIEW_ALL,
+                Permission.ATTENDANCE_BULK_UPLOAD,
 
                 // Audit
                 Permission.AUDIT_READ));
@@ -128,6 +130,7 @@ public class PermissionMatrix {
                 Permission.ATTENDANCE_MARK,
                 Permission.ATTENDANCE_VIEW_OWN,
                 Permission.ATTENDANCE_UPDATE,
+                Permission.ATTENDANCE_BULK_UPLOAD,
 
                 // Subject (read only)
                 Permission.SUBJECT_READ));

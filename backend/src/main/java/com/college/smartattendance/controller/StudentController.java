@@ -4,10 +4,15 @@ import com.college.smartattendance.dto.QrAttendanceRequest;
 import com.college.smartattendance.entity.AttendanceRecord;
 import com.college.smartattendance.entity.Student;
 import com.college.smartattendance.entity.User;
+import com.college.smartattendance.repository.AcademicYearRepository;
+import com.college.smartattendance.repository.StudentClassMapRepository;
 import com.college.smartattendance.repository.StudentRepository;
 import com.college.smartattendance.repository.UserRepository;
 import com.college.smartattendance.service.AttendanceService;
 import com.college.smartattendance.service.ClassCurriculumService;
+import com.college.smartattendance.entity.CourseClass;
+import com.college.smartattendance.entity.StudentClassMap;
+import com.college.smartattendance.entity.AcademicYear;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,6 +37,12 @@ public class StudentController {
 
     @Autowired
     private ClassCurriculumService classCurriculumService;
+
+    @Autowired
+    private StudentClassMapRepository studentClassMapRepository;
+
+    @Autowired
+    private AcademicYearRepository academicYearRepository;
 
     private Student getAuthenticatedStudent(Authentication authentication) {
         String username = authentication.getName();
@@ -89,11 +100,18 @@ public class StudentController {
                     statusMessage = "Attendance recorded with status: " + record.getStatus();
             }
 
+            String subjectName = "Unknown";
+            if (record.getSession().getFacultySubjectMap() != null) {
+                subjectName = record.getSession().getFacultySubjectMap().getSubject().getName();
+            } else if (record.getSession().getLabSubject() != null) {
+                subjectName = record.getSession().getLabSubject().getName();
+            }
+
             return ResponseEntity.ok(Map.of(
                     "status", record.getStatus().toString(),
                     "message", statusMessage,
                     "timestamp", record.getTimestamp().toString(),
-                    "subjectName", record.getSession().getFacultySubjectMap().getSubject().getName()
+                    "subjectName", subjectName
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -132,6 +150,7 @@ public class StudentController {
         return ResponseEntity.ok(attendanceService.getStudentSubjects(student.getId()));
     }
 
+
     @GetMapping("/subject-attendance/{subjectId}")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<com.college.smartattendance.dto.SubjectAttendanceDto> getSubjectAttendance(
@@ -166,14 +185,41 @@ public class StudentController {
     }
 
     @GetMapping("/alerts")
-    public ResponseEntity<List<String>> getAlerts(Authentication authentication) {
+    public ResponseEntity<List<com.college.smartattendance.dto.StudentAlertDto>> getAlerts(Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
         return ResponseEntity.ok(attendanceService.getStudentAlerts(student.getId()));
+    }
+
+    @PostMapping("/alerts/{alertId}/read")
+    public ResponseEntity<?> markAlertRead(@PathVariable Long alertId) {
+        attendanceService.markAlertAsRead(alertId);
+        return ResponseEntity.ok(java.util.Map.of("message", "Alert marked as read"));
     }
 
     @GetMapping("/class-curriculum")
     public ResponseEntity<?> getClassCurriculum(Authentication authentication) {
         Student student = getAuthenticatedStudent(authentication);
+        
+        // 1. Try to find class-specific curriculum first
+        AcademicYear activeYear = academicYearRepository.findByActiveTrue().orElse(null);
+        if (activeYear != null) {
+            List<StudentClassMap> maps = studentClassMapRepository.findByStudent_IdAndAcademicYear_Id(student.getId(), activeYear.getId());
+            if (!maps.isEmpty()) {
+                CourseClass cc = maps.get(0).getCourseClass();
+                boolean isPublished = "PUBLISHED".equalsIgnoreCase(cc.getTimetableUrl());
+                
+                if (isPublished || cc.getSyllabusUrl() != null || (cc.getSyllabus() != null && !cc.getSyllabus().isBlank())) {
+                    return ResponseEntity.ok(Map.of(
+                        "timetableText", isPublished && cc.getTimetable() != null ? cc.getTimetable() : "",
+                        "syllabusText", cc.getSyllabus() != null ? cc.getSyllabus() : "",
+                        "timetableImageUrl", "", // We now use JSON timetable mostly
+                        "syllabusUrl", cc.getSyllabusUrl() != null ? cc.getSyllabusUrl() : ""
+                    ));
+                }
+            }
+        }
+
+        // 2. Fallback to general curriculum matching
         return classCurriculumService.findBestMatchForStudent(student)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.ok(Map.of(

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
     Box,
     Card,
@@ -35,7 +36,7 @@ import {
 } from '@mui/icons-material';
 import { bulkUploadAPI } from '../../services/api';
 
-const BulkUploadModule = ({ type = 'student' }) => {
+const BulkUploadModule = ({ type = 'student', context = null }) => {
     const [activeTab, setActiveTab] = useState(0);
     const [file, setFile] = useState(null);
     const [validationResult, setValidationResult] = useState(null);
@@ -64,9 +65,14 @@ const BulkUploadModule = ({ type = 'student' }) => {
 
         setIsValidating(true);
         try {
-            const result = type === 'student'
-                ? await bulkUploadAPI.validateStudentUpload(file)
-                : await bulkUploadAPI.validateFacultyUpload(file);
+            let result;
+            if (type === 'student') {
+                result = await bulkUploadAPI.validateStudentUpload(file, context?.id);
+            } else if (type === 'attendance') {
+                result = await bulkUploadAPI.validateAttendanceUpload(file, context?.mappingId, context?.date);
+            } else {
+                result = await bulkUploadAPI.validateFacultyUpload(file);
+            }
 
             setValidationResult(result);
             setActiveTab(1); // Switch to preview tab
@@ -85,14 +91,19 @@ const BulkUploadModule = ({ type = 'student' }) => {
 
         setIsConfirming(true);
         try {
-            const count = type === 'student'
-                ? await bulkUploadAPI.confirmStudentUpload(validationResult.uploadLogId)
-                : await bulkUploadAPI.confirmFacultyUpload(validationResult.uploadLogId);
+            let count;
+            if (type === 'student') {
+                count = await bulkUploadAPI.confirmStudentUpload(validationResult.uploadLogId, context?.id);
+            } else if (type === 'attendance') {
+                count = await bulkUploadAPI.confirmAttendanceUpload(validationResult.uploadLogId, context?.mappingId, context?.date);
+            } else {
+                count = await bulkUploadAPI.confirmFacultyUpload(validationResult.uploadLogId);
+            }
 
             setUploadComplete(true);
             setConfirmDialogOpen(false);
             setActiveTab(2); // Switch to success tab
-            alert(`Successfully imported ${count} ${type}(s)`);
+            alert(`Successfully imported ${count} record(s)`);
         } catch (error) {
             alert('Confirmation failed: ' + (error.response?.data?.message || error.message));
         } finally {
@@ -101,7 +112,6 @@ const BulkUploadModule = ({ type = 'student' }) => {
     };
 
     const handleDownloadTemplate = () => {
-        // Build CSV with comprehensive headers and multiple example rows
         const studentHeaders = [
             'firstName', 'lastName', 'email', 'contactNumber', 'gender',
             'rollNumber', 'departmentCode', 'program', 'currentSemester',
@@ -111,9 +121,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
         const studentExamples = [
             ['Ravi', 'Kumar', 'ravi.kumar@college.edu', '9876543210', 'MALE', '22B91A0501', 'CSE', 'UG', '3', 'A', '2022', 'ACTIVE'],
             ['Priya', 'Sharma', 'priya.sharma@college.edu', '9876543211', 'FEMALE', '22B91A0502', 'ECE', 'UG', '3', 'B', '2022', 'ACTIVE'],
-            ['Amit', 'Singh', 'amit.singh@college.edu', '9876543212', 'MALE', '22B91A0503', 'MECH', 'UG', '3', 'A', '2022', 'ACTIVE'],
-            ['Sneha', 'Patel', 'sneha.patel@college.edu', '9876543213', 'FEMALE', '22B91A0504', 'CIVIL', 'UG', '3', 'C', '2022', 'ACTIVE'],
-            ['Rahul', 'Verma', 'rahul.verma@college.edu', '9876543214', 'MALE', '22B91A0505', 'CSE', 'UG', '3', 'B', '2022', 'ACTIVE']
+            ['Amit', 'Singh', 'amit.singh@college.edu', '9876543212', 'MALE', '22B91A0503', 'MECH', 'UG', '3', 'A', '2022', 'ACTIVE']
         ];
 
         const facultyHeaders = [
@@ -124,64 +132,43 @@ const BulkUploadModule = ({ type = 'student' }) => {
 
         const facultyExamples = [
             ['Dr. Suresh', 'Reddy', 'suresh.reddy@college.edu', '9876543215', 'MALE', 'FAC001', 'CSE', 'FACULTY', 'Assistant Professor', 'M.Tech, Ph.D.', '2020-06-01', 'ACTIVE'],
-            ['Prof. Meera', 'Iyer', 'meera.iyer@college.edu', '9876543216', 'FEMALE', 'FAC002', 'ECE', 'FACULTY', 'Associate Professor', 'M.E., Ph.D.', '2018-07-15', 'ACTIVE'],
-            ['Dr. Rajesh', 'Gupta', 'rajesh.gupta@college.edu', '9876543217', 'MALE', 'FAC003', 'MECH', 'HOD', 'Professor', 'B.E., M.Tech, Ph.D.', '2015-01-10', 'ACTIVE'],
-            ['Ms. Kavita', 'Sharma', 'kavita.sharma@college.edu', '9876543218', 'FEMALE', 'FAC004', 'CIVIL', 'FACULTY', 'Lecturer', 'B.Tech, M.Tech', '2021-08-20', 'ACTIVE'],
-            ['Dr. Vikram', 'Singh', 'vikram.singh@college.edu', '9876543219', 'MALE', 'FAC005', 'CSE', 'PRINCIPAL', 'Principal', 'B.Tech, M.Tech, Ph.D.', '2010-06-01', 'ACTIVE']
+            ['Prof. Meera', 'Iyer', 'meera.iyer@college.edu', '9876543216', 'FEMALE', 'FAC002', 'ECE', 'FACULTY', 'Associate Professor', 'M.E., Ph.D.', '2018-07-15', 'ACTIVE']
         ];
 
-        const headers = type === 'student' ? studentHeaders : facultyHeaders;
-        const examples = type === 'student' ? studentExamples : facultyExamples;
+        const attendanceHeaders = ['rollNumber', 'date', 'status'];
+        const attendanceExamples = [
+            ['22B91A0501', '2024-04-01', 'PRESENT'],
+            ['22B91A0502', '2024-04-01', 'ABSENT']
+        ];
 
-        // Create CSV content with headers and examples
-        let csvContent = headers.join(',') + '\n';
-        examples.forEach(example => {
-            csvContent += example.map(field => `"${field}"`).join(',') + '\n';
-        });
+        let headers, examples, sheetName;
+        if (type === 'student') {
+            headers = studentHeaders;
+            examples = studentExamples;
+            sheetName = 'Students';
+        } else if (type === 'attendance') {
+            headers = attendanceHeaders;
+            examples = attendanceExamples;
+            sheetName = 'Attendance';
+        } else {
+            headers = facultyHeaders;
+            examples = facultyExamples;
+            sheetName = 'Faculty';
+        }
 
-        // Add instructions as comments at the top
-        const instructions = type === 'student'
-            ? `# Student Bulk Upload Template
-# Instructions:
-# 1. Do not modify the header row
-# 2. Fill in one row per student
-# 3. Required fields: firstName, lastName, email, rollNumber, departmentCode
-# 4. Email must be unique and valid
-# 5. Roll number must be unique
-# 6. Department code must exist in the system (e.g., CSE, ECE, MECH, CIVIL)
-# 7. Gender: MALE or FEMALE
-# 8. Program: UG or PG
-# 9. Current semester: 1-8 for UG, 1-4 for PG
-# 10. Section: A, B, C, etc.
-# 11. Status: ACTIVE or INACTIVE
-#
-`
-            : `# Faculty Bulk Upload Template
-# Instructions:
-# 1. Do not modify the header row
-# 2. Fill in one row per faculty member
-# 3. Required fields: firstName, lastName, email, facultyId, departmentCode
-# 4. Email must be unique and valid
-# 5. Faculty ID must be unique
-# 6. Department code must exist in the system (e.g., CSE, ECE, MECH, CIVIL)
-# 7. Role: FACULTY, HOD, or PRINCIPAL
-# 8. Gender: MALE or FEMALE
-# 9. Employment Status: ACTIVE or INACTIVE
-# 10. Date format for joiningDate: YYYY-MM-DD
-#
-`;
+        // Prepare data for XLSX: [headers, ...examples]
+        const data = [headers, ...examples];
 
-        csvContent = instructions + csvContent;
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${type}_bulk_upload_template.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // Add instructions as a separate sheet or a comment-like row (optional)
+        // Here we just use a single sheet for simplicity as Excel is better than CSV for structure
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+        // Write file
+        XLSX.writeFile(wb, `${type}_bulk_upload_template.xlsx`);
     };
 
     const handleReset = () => {
@@ -194,10 +181,10 @@ const BulkUploadModule = ({ type = 'student' }) => {
     const renderUploadTab = () => (
         <Box sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="h5" gutterBottom fontWeight={600} color="primary">
-                Bulk Upload {type === 'student' ? 'Students' : 'Faculty'}
+                Bulk Upload {type === 'student' ? 'Students' : type === 'attendance' ? 'Attendance' : 'Faculty'}
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                Upload multiple {type === 'student' ? 'students' : 'faculty members'} at once using a CSV or Excel file
+                Upload multiple {type === 'student' ? 'students' : type === 'attendance' ? 'attendance records' : 'faculty members'} at once using an Excel or CSV file
             </Typography>
 
             <Alert severity="info" sx={{ mb: 4, textAlign: 'left' }}>
@@ -219,7 +206,7 @@ const BulkUploadModule = ({ type = 'student' }) => {
                 sx={{ mb: 4, px: 4, py: 1.5 }}
                 size="large"
             >
-                Download {type === 'student' ? 'Student' : 'Faculty'} Template
+                Download {type === 'student' ? 'Student' : type === 'attendance' ? 'Attendance' : 'Faculty'} Template
             </Button>
 
             <Box

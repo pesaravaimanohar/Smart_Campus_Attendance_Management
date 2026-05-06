@@ -53,12 +53,16 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/files/**").permitAll() // Public access to uploaded files
-                        .requestMatchers("/api/me/**").authenticated() // Profile endpoints require authentication
+                        .requestMatchers("/api/files/**").permitAll()
+                        .requestMatchers("/api/bulk-upload/**").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("/api/me/**").authenticated()
                         .requestMatchers("/api/student/**").hasAnyRole("STUDENT", "ADMIN")
                         .requestMatchers("/api/faculty/**").hasAnyRole("FACULTY", "HOD", "ADMIN", "PRINCIPAL")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/bulk-upload/**").hasAnyRole("ADMIN", "HOD", "PRINCIPAL")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 

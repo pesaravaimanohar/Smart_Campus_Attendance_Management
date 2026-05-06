@@ -14,6 +14,7 @@ public class ClassCurriculumDto {
     private String timetableText;
     private String syllabusText;
     private String syllabusUrl;
+    private String timetableImageUrl;
 
     private LocalDateTime updatedAt;
 
@@ -81,6 +82,14 @@ public class ClassCurriculumDto {
 
     public void setSyllabusUrl(String syllabusUrl) {
         this.syllabusUrl = syllabusUrl;
+    }
+
+    public String getTimetableImageUrl() {
+        return timetableImageUrl;
+    }
+
+    public void setTimetableImageUrl(String timetableImageUrl) {
+        this.timetableImageUrl = timetableImageUrl;
     }
 
     public LocalDateTime getUpdatedAt() {

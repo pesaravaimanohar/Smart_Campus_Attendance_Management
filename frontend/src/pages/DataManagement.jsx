@@ -34,6 +34,150 @@ function Toast({ msg, type, onClose }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  CLASSES TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function ClassesTab({ departments, toast }) {
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ name: '', department: '', yearLevel: 1, programType: 'UG' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setClasses(await apiCall('GET', '/classes')); }
+    catch (e) { toast(e.message, 'error'); }
+    finally { setLoading(false); }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm({ name: '', department: departments[0]?.code || '', yearLevel: 1, programType: 'UG' });
+    setShowForm(true);
+  };
+
+  const openEdit = (c) => {
+    setEditTarget(c);
+    setForm({
+      name: c.name || '',
+      department: c.department || '',
+      yearLevel: c.yearLevel || 1,
+      programType: c.programType || 'UG'
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editTarget) {
+        await apiCall('PUT', `/classes/${editTarget.id}`, form);
+        toast('Class updated successfully', 'success');
+      } else {
+        await apiCall('POST', '/classes', form);
+        toast('Class added successfully', 'success');
+      }
+      setShowForm(false);
+      load();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete class ${name}?`)) return;
+    try {
+      await apiCall('DELETE', `/classes/${id}`);
+      toast('Class deleted', 'success');
+      load();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
+  const filtered = classes.filter(c =>
+    `${c.name} ${c.department}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="dm-tab-content">
+      <div className="dm-toolbar">
+        <input className="dm-search" placeholder="🔍 Search classes…" value={search}
+          onChange={e => setSearch(e.target.value)} />
+        <button className="dm-btn dm-btn-primary" onClick={openAdd}>+ Add Class</button>
+      </div>
+
+      {loading ? <div className="dm-loading">Loading…</div> : (
+        <div className="dm-table-wrap">
+          <table className="dm-table">
+            <thead>
+              <tr>
+                <th>Class Name</th><th>Department</th><th>Program</th><th>Year Level</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan="5" className="dm-empty">No classes found</td></tr>
+              ) : filtered.map(c => (
+                <tr key={c.id}>
+                  <td className="dm-name">{c.name}</td>
+                  <td><span className="dm-badge dm-badge-purple">{c.department}</span></td>
+                  <td>
+                    <span className={`dm-badge ${c.programType === 'PG' ? 'dm-badge-orange' : 'dm-badge-teal'}`}>
+                      {c.programType || 'UG'}
+                    </span>
+                  </td>
+                  <td>Year {c.yearLevel}</td>
+                  <td className="dm-actions">
+                    <button className="dm-btn dm-btn-sm dm-btn-ghost" onClick={() => openEdit(c)}>✏️ Edit</button>
+                    <button className="dm-btn dm-btn-sm dm-btn-danger" onClick={() => handleDelete(c.id, c.name)}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="dm-count">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</div>
+        </div>
+      )}
+
+      {showForm && (
+        <Modal title={editTarget ? 'Edit Class' : 'Add New Class'} onClose={() => setShowForm(false)}>
+          <form className="dm-form" onSubmit={handleSubmit}>
+            <div className="dm-form-group">
+              <label>Class Name *</label>
+              <input required value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. CSE-3A" />
+            </div>
+            <div className="dm-form-group">
+              <label>Department *</label>
+              <select required value={form.department} onChange={e => setForm(f => ({...f, department: e.target.value}))}>
+                <option value="">— Select —</option>
+                {departments.map(d => <option key={d.code} value={d.code}>{d.name} ({d.code})</option>)}
+              </select>
+            </div>
+            <div className="dm-form-row">
+              <div className="dm-form-group">
+                <label>Program Type *</label>
+                <select required value={form.programType} onChange={e => setForm(f => ({...f, programType: e.target.value}))}>
+                  <option value="UG">UG (Undergraduate)</option>
+                  <option value="PG">PG (Postgraduate)</option>
+                </select>
+              </div>
+              <div className="dm-form-group">
+                <label>Year Level *</label>
+                <input type="number" required min="1" max="4" value={form.yearLevel} onChange={e => setForm(f => ({...f, yearLevel: parseInt(e.target.value)}))} />
+              </div>
+            </div>
+            <div className="dm-form-actions">
+              <button type="button" className="dm-btn dm-btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="dm-btn dm-btn-primary">{editTarget ? 'Update Class' : 'Create Class'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  STUDENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function StudentsTab({ departments, toast }) {
@@ -432,7 +576,7 @@ function SubjectsTab({ toast }) {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ name: '', code: '' });
+  const [form, setForm] = useState({ name: '', code: '', subjectType: 'REGULAR' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -443,8 +587,8 @@ function SubjectsTab({ toast }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const openAdd = () => { setEditTarget(null); setForm({ name: '', code: '' }); setShowForm(true); };
-  const openEdit = (s) => { setEditTarget(s); setForm({ name: s.name, code: s.code }); setShowForm(true); };
+  const openAdd = () => { setEditTarget(null); setForm({ name: '', code: '', subjectType: 'REGULAR' }); setShowForm(true); };
+  const openEdit = (s) => { setEditTarget(s); setForm({ name: s.name, code: s.code, subjectType: s.subjectType || 'REGULAR' }); setShowForm(true); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -475,7 +619,7 @@ function SubjectsTab({ toast }) {
       {loading ? <div className="dm-loading">Loading…</div> : (
         <div className="dm-table-wrap">
           <table className="dm-table">
-            <thead><tr><th>#</th><th>Subject Code</th><th>Subject Name</th><th>Actions</th></tr></thead>
+            <thead><tr><th>#</th><th>Code</th><th>Name</th><th>Type</th><th>Actions</th></tr></thead>
             <tbody>
               {filtered.length === 0 ? <tr><td colSpan="4" className="dm-empty">No subjects found</td></tr>
               : filtered.map((s, i) => (
@@ -483,6 +627,11 @@ function SubjectsTab({ toast }) {
                   <td className="dm-muted">{i + 1}</td>
                   <td><span className="dm-badge dm-badge-teal">{s.code}</span></td>
                   <td className="dm-name">{s.name}</td>
+                  <td>
+                    <span className={`dm-badge ${s.subjectType === 'LAB' ? 'dm-badge-purple' : 'dm-badge-blue'}`}>
+                      {s.subjectType || 'REGULAR'}
+                    </span>
+                  </td>
                   <td className="dm-actions">
                     <button className="dm-btn dm-btn-sm dm-btn-ghost" onClick={() => openEdit(s)}>✏️ Edit</button>
                     <button className="dm-btn dm-btn-sm dm-btn-danger" onClick={() => handleDelete(s.id, s.name)}>🗑️</button>
@@ -506,6 +655,13 @@ function SubjectsTab({ toast }) {
               <label>Subject Code *</label>
               <input required value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} placeholder="e.g. CS301" />
             </div>
+            <div className="dm-form-group">
+              <label>Subject Type *</label>
+              <select required value={form.subjectType} onChange={e => setForm(f => ({...f, subjectType: e.target.value}))}>
+                <option value="REGULAR">REGULAR (Single Faculty)</option>
+                <option value="LAB">LAB (Multiple Faculty)</option>
+              </select>
+            </div>
             <div className="dm-form-actions">
               <button type="button" className="dm-btn dm-btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
               <button type="submit" className="dm-btn dm-btn-primary">{editTarget ? 'Update Subject' : 'Add Subject'}</button>
@@ -516,6 +672,155 @@ function SubjectsTab({ toast }) {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  LAB ASSIGNMENTS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function LabAssignmentsTab({ toast }) {
+  const [labs, setLabs] = useState([]);
+  const [faculty, setFaculty] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [academicYears, setAcademicYears] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({
+    labId: '', facultyIds: ['', '', ''], classId: '', academicYearId: ''
+  });
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [allSubjects, f, c, ay] = await Promise.all([
+        apiCall('GET', '/subjects'), apiCall('GET', '/faculty'),
+        apiCall('GET', '/classes'), apiCall('GET', '/academic-years'),
+      ]);
+      setLabs(allSubjects.filter(s => s.subjectType === 'LAB'));
+      setFaculty(f);
+      setClasses(c);
+      setAcademicYears(ay);
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setLoading(false); }
+  }, [toast]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const openAdd = () => {
+    setForm({
+      labId: labs[0]?.id || '',
+      facultyIds: ['', '', ''],
+      classId: classes[0]?.id || '',
+      academicYearId: academicYears.find(ay => ay.active)?.id || academicYears[0]?.id || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleFacultyChange = (index, val) => {
+    const newIds = [...form.facultyIds];
+    newIds[index] = val;
+    setForm({ ...form, facultyIds: newIds });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const ids = form.facultyIds.filter(id => id !== '');
+    if (ids.length !== 3) {
+      toast('Please select exactly 3 faculty members for the lab.', 'error');
+      return;
+    }
+    
+    try {
+      // Using the LabManagementController endpoint: POST /api/admin/labs/{labId}/faculty
+      const params = new URLSearchParams();
+      ids.forEach(id => params.append('facultyIds', id));
+      params.append('classId', form.classId);
+      params.append('academicYearId', form.academicYearId);
+
+      await adminDataAPI.request('POST', `/labs/${form.labId}/faculty?${params.toString()}`);
+      
+      toast('Lab faculty assigned successfully', 'success');
+      setShowForm(false);
+      loadAll();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  return (
+    <div className="dm-tab-content">
+      <div className="dm-toolbar">
+        <input className="dm-search" placeholder="🔍 Search labs…" value={search} onChange={e => setSearch(e.target.value)} />
+        <button className="dm-btn dm-btn-primary" onClick={openAdd} disabled={labs.length === 0 || faculty.length === 0}>
+          + Assign Lab Faculty
+        </button>
+      </div>
+
+      {loading ? <div className="dm-loading">Loading…</div> : (
+        <div className="dm-info-banner" style={{ background: 'rgba(99,102,241,0.1)', borderColor: 'rgba(99,102,241,0.3)', color: '#a5b4fc' }}>
+          💡 Note: Lab subjects require exactly 3 faculty members assigned. Use the Subjects tab to create a LAB type subject first.
+        </div>
+      )}
+
+      {/* Since we don't have a direct "list all lab assignments" DTO that joins everything nicely for a table yet, 
+          we can just show the form for now or implement a small view if needed. 
+          For now, let's focus on the "Add" functionality as requested. */}
+      
+      {showForm && (
+        <Modal title="Assign 3 Faculty to Lab" onClose={() => setShowForm(false)}>
+          <form className="dm-form" onSubmit={handleSubmit}>
+            <div className="dm-form-group">
+              <label>Lab Subject *</label>
+              <select required value={form.labId} onChange={e => setForm(f => ({...f, labId: e.target.value}))}>
+                <option value="">— Select Lab —</option>
+                {labs.map(l => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-group">
+              <label>Primary Faculty *</label>
+              <select required value={form.facultyIds[0]} onChange={e => handleFacultyChange(0, e.target.value)}>
+                <option value="">— Select Faculty 1 —</option>
+                {faculty.map(f => <option key={f.id} value={f.id}>{f.firstName} {f.lastName} ({f.facultyId})</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-group">
+              <label>Secondary Faculty *</label>
+              <select required value={form.facultyIds[1]} onChange={e => handleFacultyChange(1, e.target.value)}>
+                <option value="">— Select Faculty 2 —</option>
+                {faculty.map(f => <option key={f.id} value={f.id}>{f.firstName} {f.lastName} ({f.facultyId})</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-group">
+              <label>Tertiary Faculty *</label>
+              <select required value={form.facultyIds[2]} onChange={e => handleFacultyChange(2, e.target.value)}>
+                <option value="">— Select Faculty 3 —</option>
+                {faculty.map(f => <option key={f.id} value={f.id}>{f.firstName} {f.lastName} ({f.facultyId})</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-group">
+              <label>Class *</label>
+              <select required value={form.classId} onChange={e => setForm(f => ({...f, classId: e.target.value}))}>
+                <option value="">— Select Class —</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name} - Year {c.yearLevel}</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-group">
+              <label>Academic Year *</label>
+              <select required value={form.academicYearId} onChange={e => setForm(f => ({...f, academicYearId: e.target.value}))}>
+                <option value="">— Select Year —</option>
+                {academicYears.map(ay => <option key={ay.id} value={ay.id}>{ay.name}{ay.active ? ' ✓' : ''}</option>)}
+              </select>
+            </div>
+
+            <div className="dm-form-actions">
+              <button type="button" className="dm-btn dm-btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="dm-btn dm-btn-primary">Create Lab Assignment</button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ASSIGNMENTS TAB
@@ -853,10 +1158,12 @@ export default function DataManagement() {
 
   const TABS = [
     { key: 'departments', label: '🏢 Departments', icon: '🏢' },
+    { key: 'classes',     label: '🏫 Classes',     icon: '🏫' },
     { key: 'students',    label: '🎓 Students',    icon: '🎓' },
     { key: 'faculty',     label: '👨‍🏫 Faculty',    icon: '👨‍🏫' },
     { key: 'subjects',    label: '📚 Subjects',    icon: '📚' },
     { key: 'assignments', label: '🔗 Assignments', icon: '🔗' },
+    { key: 'labs',        label: '⚗️ Labs',        icon: '⚗️' },
     { key: 'system',      label: '🚀 System',      icon: '🚀' },
   ];
 
@@ -896,10 +1203,12 @@ export default function DataManagement() {
       {/* Tab panels */}
       <div className="dm-panel">
         {activeTab === 'departments' && <DepartmentsTab departments={departments} onRefresh={loadDepartments} toast={pushToast} />}
+        {activeTab === 'classes'     && <ClassesTab departments={departments} toast={pushToast} />}
         {activeTab === 'students'    && <StudentsTab departments={departments} toast={pushToast} />}
         {activeTab === 'faculty'     && <FacultyTab departments={departments} toast={pushToast} />}
         {activeTab === 'subjects'    && <SubjectsTab toast={pushToast} />}
         {activeTab === 'assignments' && <AssignmentsTab toast={pushToast} />}
+        {activeTab === 'labs'        && <LabAssignmentsTab toast={pushToast} />}
         {activeTab === 'system'      && <SystemTab toast={pushToast} />}
       </div>
 

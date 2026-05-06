@@ -67,7 +67,6 @@ const Login = () => {
             minHeight: '100vh',
             bgcolor: 'background.default',
             display: 'flex',
-            flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
         }}>
@@ -75,233 +74,213 @@ const Login = () => {
             <Box sx={{
                 position: 'absolute',
                 top: -100, right: -100,
-                width: 400, height: 400,
+                width: 600, height: 600,
                 borderRadius: '50%',
-                background: `radial-gradient(circle, ${alpha(theme.palette.primary.main, 0.08)} 0%, transparent 70%)`,
+                background: `radial-gradient(circle, ${alpha(theme.palette.primary.main, 0.05)} 0%, transparent 70%)`,
                 pointerEvents: 'none',
             }} />
-            <Box sx={{
-                position: 'absolute',
-                bottom: -150, left: -150,
-                width: 500, height: 500,
-                borderRadius: '50%',
-                background: `radial-gradient(circle, ${alpha(theme.palette.secondary.main, 0.06)} 0%, transparent 70%)`,
-                pointerEvents: 'none',
-            }} />
-
+            
             {/* Theme Toggle */}
-            <Box sx={{ position: 'absolute', top: 16, right: 20, zIndex: 1201 }}>
+            <Box sx={{ position: 'absolute', top: 24, right: 32, zIndex: 1201 }}>
                 <ThemeToggle />
             </Box>
 
-            {/* Main Content */}
-            <Container maxWidth="lg" sx={{
-                flexGrow: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                py: 4
-            }}>
-                <Grid container spacing={6} alignItems="center" justifyContent="center">
-                    {/* Left Side - Branding (hidden on mobile) */}
-                    {!isMobile && (
-                        <Grid item md={6}>
-                            <Fade in timeout={1000}>
-                                <Box>
-                                    <Box display="flex" alignItems="center" gap={2} mb={4}>
-                                        <Box sx={{
-                                            width: 56, height: 56,
-                                            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                                            borderRadius: '16px',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            color: 'white',
-                                            boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.3)}`,
-                                        }}>
-                                            <SchoolIcon fontSize="large" />
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="h5" fontWeight={800} color="text.primary" lineHeight={1.2}>
-                                                JNTUA College of Engineering
-                                            </Typography>
-                                            <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                                                Ananthapuramu
-                                            </Typography>
-                                        </Box>
-                                    </Box>
-
-                                    <Typography variant="h3" fontWeight={900} sx={{
-                                        mb: 2,
-                                        background: isDark
-                                            ? 'linear-gradient(135deg, #F1F5F9 0%, #818CF8 50%, #A78BFA 100%)'
-                                            : 'linear-gradient(135deg, #111827 0%, #4F46E5 50%, #7C3AED 100%)',
-                                        WebkitBackgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                        lineHeight: 1.2,
+            <Grid container sx={{ flexGrow: 1 }}>
+                {/* Left Panel - Branding & Info (Hidden on Mobile) */}
+                {!isMobile && (
+                    <Grid item md={5} lg={4} sx={{
+                        bgcolor: alpha(theme.palette.background.paper, 0.4),
+                        borderRight: '1px solid',
+                        borderColor: 'divider',
+                        p: 6,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        backdropFilter: 'blur(20px)',
+                        zIndex: 2
+                    }}>
+                        <Fade in timeout={1000}>
+                            <Box>
+                                <Box display="flex" alignItems="center" gap={2} mb={6}>
+                                    <Box sx={{
+                                        width: 48, height: 48,
+                                        background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                                        borderRadius: '14px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: 'white',
+                                        boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.25)}`,
                                     }}>
-                                        Smart Attendance System
-                                    </Typography>
-
-                                    <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ mb: 4, lineHeight: 1.6 }}>
-                                        QR-based, geo-fenced attendance tracking for the modern campus.
-                                        Fast, reliable, and accurate.
-                                    </Typography>
-
-                                    {/* Feature pills */}
-                                    <Stack spacing={2}>
-                                        {features.map((f, i) => (
-                                            <Fade in timeout={1200 + i * 200} key={i}>
-                                                <Box display="flex" alignItems="center" gap={2} sx={{
-                                                    p: 2, borderRadius: 3,
-                                                    bgcolor: alpha(theme.palette.primary.main, isDark ? 0.08 : 0.04),
-                                                    border: '1px solid',
-                                                    borderColor: alpha(theme.palette.primary.main, 0.1),
-                                                    transition: 'all 0.3s ease',
-                                                    '&:hover': {
-                                                        bgcolor: alpha(theme.palette.primary.main, isDark ? 0.12 : 0.06),
-                                                        transform: 'translateX(4px)',
-                                                    }
-                                                }}>
-                                                    <Box sx={{
-                                                        width: 44, height: 44, borderRadius: '12px',
-                                                        bgcolor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.1),
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        color: 'primary.main', flexShrink: 0,
-                                                    }}>
-                                                        {f.icon}
-                                                    </Box>
-                                                    <Box>
-                                                        <Typography variant="subtitle2" fontWeight={700}>{f.title}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">{f.desc}</Typography>
-                                                    </Box>
-                                                </Box>
-                                            </Fade>
-                                        ))}
-                                    </Stack>
+                                        <SchoolIcon fontSize="medium" />
+                                    </Box>
+                                    <Box>
+                                        <Typography variant="h6" fontWeight={800} color="text.primary" sx={{ letterSpacing: -0.5 }}>
+                                            JNTUA
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                                            University Campus
+                                        </Typography>
+                                    </Box>
                                 </Box>
-                            </Fade>
-                        </Grid>
-                    )}
 
-                    {/* Right Side - Login Form */}
-                    <Grid item xs={12} md={5}>
-                        <Fade in timeout={800}>
+                                <Typography variant="h3" fontWeight={900} sx={{
+                                    mb: 2,
+                                    background: isDark
+                                        ? 'linear-gradient(135deg, #FFF 0%, #cbd5e1 100%)'
+                                        : 'linear-gradient(135deg, #1e293b 0%, #64748b 100%)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    lineHeight: 1.1,
+                                    fontSize: '2.5rem'
+                                }}>
+                                    The Future of Attendance Tracking
+                                </Typography>
+
+                                <Typography variant="body1" color="text.secondary" sx={{ mb: 6, maxWidth: 380, opacity: 0.8, lineHeight: 1.6 }}>
+                                    Streamline your academic workflow with location-verified QR scanning and real-time analytics.
+                                </Typography>
+
+                                <Stack spacing={3}>
+                                    {features.map((f, i) => (
+                                        <Fade in timeout={1200 + i * 200} key={i}>
+                                            <Box display="flex" alignItems="center" gap={2}>
+                                                <Box sx={{
+                                                    width: 40, height: 40, borderRadius: '10px',
+                                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    color: 'primary.main', flexShrink: 0,
+                                                }}>
+                                                    {f.icon}
+                                                </Box>
+                                                <Box>
+                                                    <Typography variant="subtitle2" fontWeight={700}>{f.title}</Typography>
+                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -0.5 }}>{f.desc}</Typography>
+                                                </Box>
+                                            </Box>
+                                        </Fade>
+                                    ))}
+                                </Stack>
+                            </Box>
+                        </Fade>
+                    </Grid>
+                )}
+
+                {/* Main Content Area - Form in Center */}
+                <Grid item xs={12} md={7} lg={8} sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    p: { xs: 2, md: 4 }
+                }}>
+                    <Fade in timeout={800}>
+                        <Box sx={{ width: '100%', maxWidth: 460 }}>
+                            {/* Mobile Header (Hidden on Desktop) */}
+                            {isMobile && (
+                                <Box sx={{ textAlign: 'center', mb: 4 }}>
+                                     <Box sx={{
+                                        width: 56, height: 56,
+                                        background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                                        borderRadius: '16px',
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        color: 'white', mb: 2
+                                    }}>
+                                        <SchoolIcon fontSize="large" />
+                                    </Box>
+                                    <Typography variant="h5" fontWeight={900}>JNTUA Smart Attendance</Typography>
+                                </Box>
+                            )}
+
                             <Paper
                                 elevation={0}
                                 sx={{
-                                    p: { xs: 3, sm: 4 },
-                                    borderRadius: 4,
+                                    p: { xs: 4, md: 6 },
+                                    borderRadius: 5,
                                     border: '1px solid',
                                     borderColor: 'divider',
                                     bgcolor: 'background.paper',
                                     boxShadow: isDark
-                                        ? '0 16px 64px rgba(0,0,0,0.4)'
-                                        : '0 16px 64px rgba(0,0,0,0.06)',
+                                        ? '0 24px 64px rgba(0,0,0,0.4)'
+                                        : '0 24px 64px rgba(0,0,0,0.06)',
                                     position: 'relative',
-                                    overflow: 'hidden',
                                 }}
                             >
-                                {/* Gradient accent line at top */}
-                                <Box sx={{
-                                    position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-                                    background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                                }} />
-
                                 <Box sx={{
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     width: '100%',
-                                    pt: 1,
                                 }}>
-                                    {/* Mobile logo */}
-                                    {isMobile && (
-                                        <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-                                            <Box sx={{
-                                                width: 44, height: 44,
-                                                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                                                borderRadius: '12px',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                color: 'white',
-                                            }}>
-                                                <SchoolIcon />
-                                            </Box>
-                                            <Typography variant="h6" fontWeight={800}>JNTUA CEA</Typography>
-                                        </Box>
-                                    )}
-
                                     <Box sx={{
                                         width: 56, height: 56,
-                                        bgcolor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
+                                        bgcolor: alpha(theme.palette.primary.main, 0.1),
                                         color: 'primary.main',
-                                        borderRadius: '50%',
+                                        borderRadius: '16px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         mb: 3,
-                                        boxShadow: `0 4px 16px ${alpha(theme.palette.primary.main, 0.15)}`,
                                     }}>
                                         <PersonOutlineIcon fontSize="large" />
                                     </Box>
 
-                                    <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 0.5, textAlign: 'center' }}>
-                                        Welcome Back
+                                    <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 1, textAlign: 'center' }}>
+                                        Sign In
                                     </Typography>
-                                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4, textAlign: 'center' }}>
-                                        Sign in to your dashboard
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 5, textAlign: 'center' }}>
+                                        Enter your credentials to access your dashboard
                                     </Typography>
 
                                     <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
-                                        <TextField
-                                            label="User ID / Roll Number"
-                                            fullWidth
-                                            margin="normal"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
-                                            InputProps={{
-                                                startAdornment: (
-                                                    <InputAdornment position="start">
-                                                        <PersonOutlineIcon color="action" />
-                                                    </InputAdornment>
-                                                ),
-                                            }}
-                                            sx={{ mb: 2 }}
-                                            autoComplete="username"
-                                        />
+                                        <Stack spacing={2.5}>
+                                            <TextField
+                                                label="User ID / Roll Number"
+                                                fullWidth
+                                                variant="outlined"
+                                                value={username}
+                                                onChange={(e) => setUsername(e.target.value)}
+                                                InputProps={{
+                                                    startAdornment: (
+                                                        <InputAdornment position="start">
+                                                            <PersonOutlineIcon color="primary" />
+                                                        </InputAdornment>
+                                                    ),
+                                                }}
+                                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
+                                            />
 
-                                        <TextField
-                                            label="Password"
-                                            type={showPassword ? "text" : "password"}
-                                            fullWidth
-                                            margin="normal"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            InputProps={{
-                                                startAdornment: (
-                                                    <InputAdornment position="start">
-                                                        <LockOutlinedIcon color="action" />
-                                                    </InputAdornment>
-                                                ),
-                                                endAdornment: (
-                                                    <InputAdornment position="end">
-                                                        <IconButton
-                                                            onClick={() => setShowPassword(!showPassword)}
-                                                            edge="end"
-                                                            size="small"
-                                                        >
-                                                            {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                                                        </IconButton>
-                                                    </InputAdornment>
-                                                ),
-                                            }}
-                                            sx={{ mb: 1 }}
-                                            autoComplete="current-password"
-                                        />
+                                            <TextField
+                                                label="Password"
+                                                type={showPassword ? "text" : "password"}
+                                                fullWidth
+                                                variant="outlined"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                InputProps={{
+                                                    startAdornment: (
+                                                        <InputAdornment position="start">
+                                                            <LockOutlinedIcon color="primary" />
+                                                        </InputAdornment>
+                                                    ),
+                                                    endAdornment: (
+                                                        <InputAdornment position="end">
+                                                            <IconButton
+                                                                onClick={() => setShowPassword(!showPassword)}
+                                                                edge="end"
+                                                                size="small"
+                                                            >
+                                                                {showPassword ? <VisibilityOff /> : <Visibility />}
+                                                            </IconButton>
+                                                        </InputAdornment>
+                                                    ),
+                                                }}
+                                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
+                                            />
+                                        </Stack>
 
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5, mb: 4 }}>
                                             <Typography variant="caption" sx={{
                                                 color: 'primary.main',
                                                 cursor: 'pointer',
-                                                fontWeight: 600,
+                                                fontWeight: 700,
                                                 '&:hover': { textDecoration: 'underline' }
                                             }}>
                                                 Forgot Password?
@@ -310,20 +289,17 @@ const Login = () => {
 
                                         {error && (
                                             <Fade in>
-                                                <Paper sx={{
-                                                    p: 1.5,
-                                                    mb: 3,
-                                                    bgcolor: alpha(theme.palette.error.main, isDark ? 0.15 : 0.06),
+                                                <Box sx={{
+                                                    p: 1.5, mb: 3,
+                                                    bgcolor: alpha(theme.palette.error.main, 0.08),
                                                     border: '1px solid',
-                                                    borderColor: alpha(theme.palette.error.main, 0.3),
+                                                    borderColor: alpha(theme.palette.error.main, 0.2),
                                                     color: 'error.main',
-                                                    borderRadius: 2,
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 1
-                                                }} elevation={0}>
-                                                    <Typography variant="body2" fontWeight="600">{error}</Typography>
-                                                </Paper>
+                                                    borderRadius: 2.5,
+                                                    textAlign: 'center'
+                                                }}>
+                                                    <Typography variant="caption" fontWeight="700">{error}</Typography>
+                                                </Box>
                                             </Fade>
                                         )}
 
@@ -334,29 +310,30 @@ const Login = () => {
                                             size="large"
                                             disabled={loading || !username || !password}
                                             sx={{
-                                                py: 1.8,
+                                                py: 2,
                                                 fontSize: '1rem',
-                                                fontWeight: 700,
+                                                fontWeight: 800,
                                                 borderRadius: 3,
+                                                textTransform: 'none',
                                                 boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.35)}`,
-                                                mb: 3
+                                                '&:hover': {
+                                                    boxShadow: `0 12px 32px ${alpha(theme.palette.primary.main, 0.45)}`,
+                                                }
                                             }}
                                         >
-                                            {loading ? "Signing in..." : "Sign In"}
+                                            {loading ? "Verifying..." : "Sign In to Dashboard"}
                                         </Button>
                                     </Box>
                                 </Box>
                             </Paper>
-                        </Fade>
-
-                        <Box sx={{ mt: 4, textAlign: 'center' }}>
-                            <Typography variant="caption" color="text.disabled">
-                                © {new Date().getFullYear()} JNTUA CE Ananthapuramu — Smart Attendance System
+                            
+                            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 4, textAlign: 'center', opacity: 0.7 }}>
+                                 JNTUA College of Engineering Ananthapuramu — System v2.0
                             </Typography>
                         </Box>
-                    </Grid>
+                    </Fade>
                 </Grid>
-            </Container>
+            </Grid>
         </Box>
     );
 };

@@ -15,6 +15,10 @@ public class Subject {
     @Column(nullable = false, unique = true)
     private String code;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "VARCHAR(20) DEFAULT 'REGULAR'")
+    private SubjectType subjectType = SubjectType.REGULAR;
+
     public Subject() {
     }
 
@@ -40,5 +44,13 @@ public class Subject {
 
     public void setCode(String code) {
         this.code = code;
+    }
+
+    public SubjectType getSubjectType() {
+        return subjectType;
+    }
+
+    public void setSubjectType(SubjectType subjectType) {
+        this.subjectType = subjectType;
     }
 }

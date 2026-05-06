@@ -25,9 +25,7 @@ public class FileController {
             Resource resource = new UrlResource(filePath.toUri());
 
             if (resource.exists() && resource.isReadable()) {
-                // Determine content type
                 String contentType = determineContentType(filename);
-
                 return ResponseEntity.ok()
                         .contentType(MediaType.parseMediaType(contentType))
                         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
@@ -35,6 +33,56 @@ public class FileController {
             } else {
                 return ResponseEntity.notFound().build();
             }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /** Serves timetable images uploaded via the admin panel. */
+    @GetMapping("/timetables/{filename:.+}")
+    public ResponseEntity<Resource> getTimetableImage(@PathVariable String filename) {
+        try {
+            java.nio.file.Path dir = java.nio.file.Paths.get(
+                    System.getProperty("user.dir"), "uploads", "timetables");
+            java.nio.file.Path filePath = dir.resolve(filename).normalize();
+            // prevent path traversal
+            if (!filePath.startsWith(dir)) {
+                return ResponseEntity.badRequest().build();
+            }
+            Resource resource = new UrlResource(filePath.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                return ResponseEntity.notFound().build();
+            }
+            String contentType = determineContentType(filename);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /** Serves syllabus files uploaded via the admin panel. */
+    @GetMapping("/syllabus/{filename:.+}")
+    public ResponseEntity<Resource> getSyllabusFile(@PathVariable String filename) {
+        try {
+            java.nio.file.Path dir = java.nio.file.Paths.get(
+                    System.getProperty("user.dir"), "uploads", "syllabus");
+            java.nio.file.Path filePath = dir.resolve(filename).normalize();
+            // prevent path traversal
+            if (!filePath.startsWith(dir)) {
+                return ResponseEntity.badRequest().build();
+            }
+            Resource resource = new UrlResource(filePath.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                return ResponseEntity.notFound().build();
+            }
+            String contentType = determineContentType(filename);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                    .body(resource);
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
@@ -50,6 +98,8 @@ public class FileController {
                 return "image/png";
             case "webp":
                 return "image/webp";
+            case "pdf":
+                return "application/pdf";
             default:
                 return "application/octet-stream";
         }

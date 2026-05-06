@@ -79,16 +79,7 @@ public class DepartmentController {
         return ResponseEntity.ok().build();
     }
 
-    @PatchMapping("/{departmentId}/hod/{facultyId}")
-    @RequiresPermission(PermissionMatrix.Permission.DEPARTMENT_SET_HOD)
-    public ResponseEntity<Void> setHOD(
-            @PathVariable Long departmentId,
-            @PathVariable Long facultyId,
-            Authentication authentication) {
-        Long userId = getUserId(authentication);
-        departmentManagementService.setHOD(departmentId, facultyId, userId);
-        return ResponseEntity.ok().build();
-    }
+
 
     // ==================== PROGRAM ENDPOINTS ====================
 

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Service
 public class DepartmentManagementService {
@@ -17,6 +18,9 @@ public class DepartmentManagementService {
     @Autowired private ProgramRepository programRepository;
     @Autowired private StudentRepository studentRepository;
     @Autowired private FacultyRepository facultyRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private CourseClassRepository courseClassRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private AuditService auditService;
 
     // ==================== DEPARTMENT OPERATIONS ====================
@@ -51,15 +55,77 @@ public class DepartmentManagementService {
         dept.setName(dto.getName());
         dept.setActive(true);
 
-        if (dto.getHodId() != null) {
-            dept.setHod(facultyRepository.findById(dto.getHodId())
-                    .orElseThrow(() -> new RuntimeException("HOD not found: " + dto.getHodId())));
+        dept = departmentRepository.save(dept);
+
+        String hodUsername = "hod_" + dept.getCode().toLowerCase();
+        if (userRepository.findByUsername(hodUsername).isEmpty()) {
+            User hodUser = new User();
+            hodUser.setUsername(hodUsername);
+            hodUser.setPassword(passwordEncoder.encode("hod123")); // default password
+            hodUser.setRole(Role.HOD);
+            hodUser.setFirstName("Head of Department");
+            hodUser.setLastName(dept.getCode().toUpperCase());
+            hodUser.setEmail("hod_" + dept.getCode().toLowerCase() + "@jntua.in");
+            hodUser.setContactNumber("");
+            hodUser.setFirstLogin(true);
+            hodUser = userRepository.save(hodUser);
+
+            Faculty hodFaculty = new Faculty();
+            hodFaculty.setUser(hodUser);
+            hodFaculty.setFacultyId("HOD_" + dept.getCode().toUpperCase());
+            hodFaculty.setDepartment(dept.getCode());
+            hodFaculty.setEmploymentStatus(EmploymentStatus.ACTIVE);
+            hodFaculty.setDesignation("HOD");
+
+            facultyRepository.save(hodFaculty);
+            dept.setHod(hodFaculty);
+            dept = departmentRepository.save(dept);
         }
 
-        dept = departmentRepository.save(dept);
         auditService.logAction(createdBy, "Department", dept.getId(), "CREATED",
                 null, "Created: " + dto.getCode() + " - " + dto.getName(), null);
+
+        // Auto-generate classes
+        String deptCode = dept.getCode();
+        boolean isPgOnly = deptCode.equalsIgnoreCase("MBA") || deptCode.equalsIgnoreCase("MCA") || deptCode.toUpperCase().startsWith("MT");
+
+        if (!isPgOnly) {
+            for (int year = 1; year <= 4; year++) {
+                createClassIfNotExists("B.Tech " + year + getOrdinal(year) + " Year", deptCode, year, ProgramType.UG);
+            }
+        }
+        
+        for (int year = 1; year <= 2; year++) {
+            createClassIfNotExists("M.Tech " + year + getOrdinal(year) + " Year", deptCode, year, ProgramType.PG);
+        }
+        
+        if ("CSE".equalsIgnoreCase(deptCode)) {
+            for (int year = 1; year <= 2; year++) {
+                createClassIfNotExists("MCA " + year + getOrdinal(year) + " Year", deptCode, year, ProgramType.PG);
+            }
+        }
+
         return toDto(dept);
+    }
+
+    private String getOrdinal(int number) {
+        if (number == 1) return "st";
+        if (number == 2) return "nd";
+        if (number == 3) return "rd";
+        return "th";
+    }
+
+    private void createClassIfNotExists(String name, String deptCode, int year, ProgramType type) {
+        boolean exists = courseClassRepository.findAll().stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase(name) && c.getDepartment().equalsIgnoreCase(deptCode));
+        if (!exists) {
+            CourseClass cc = new CourseClass();
+            cc.setName(name);
+            cc.setDepartment(deptCode);
+            cc.setYearLevel(year);
+            cc.setProgramType(type);
+            courseClassRepository.save(cc);
+        }
     }
 
     @Transactional
@@ -95,18 +161,7 @@ public class DepartmentManagementService {
                 String.valueOf(!active), String.valueOf(active), null);
     }
 
-    @Transactional
-    public void setHOD(Long departmentId, Long facultyId, Long updatedBy) {
-        Department dept = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new RuntimeException("Department not found: " + departmentId));
-        Faculty faculty = facultyRepository.findById(facultyId)
-                .orElseThrow(() -> new RuntimeException("Faculty not found: " + facultyId));
-        String oldHod = dept.getHod() != null ? dept.getHod().getFacultyId() : "None";
-        dept.setHod(faculty);
-        departmentRepository.save(dept);
-        auditService.logAction(updatedBy, "Department", dept.getId(), "HOD_UPDATED",
-                "HOD:" + oldHod, "HOD:" + faculty.getFacultyId(), null);
-    }
+
 
     // ==================== PROGRAM OPERATIONS ====================
 

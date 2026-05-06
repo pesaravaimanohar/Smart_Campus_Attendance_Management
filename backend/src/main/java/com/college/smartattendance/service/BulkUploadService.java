@@ -52,6 +52,24 @@ public class BulkUploadService {
     @Autowired
     private AuditService auditService;
 
+    @Autowired
+    private CourseClassRepository courseClassRepository;
+
+    @Autowired
+    private AcademicYearRepository academicYearRepository;
+
+    @Autowired
+    private StudentClassMapRepository studentClassMapRepository;
+
+    @Autowired
+    private AttendanceSessionRepository attendanceSessionRepository;
+
+    @Autowired
+    private AttendanceRecordRepository attendanceRecordRepository;
+
+    @Autowired
+    private FacultySubjectMapRepository facultySubjectMapRepository;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@(.+)$");
@@ -60,7 +78,7 @@ public class BulkUploadService {
     /**
      * STEP 1: Validate student upload and create preview
      */
-    public BulkUploadValidationResult validateStudentUpload(MultipartFile file, Long uploadedBy) throws IOException {
+    public BulkUploadValidationResult validateStudentUpload(MultipartFile file, Long uploadedBy, Long targetClassId) throws IOException {
         BulkUploadLog log = new BulkUploadLog(UploadType.STUDENT, uploadedBy, file.getOriginalFilename());
         log = bulkUploadLogRepository.save(log);
 
@@ -74,11 +92,22 @@ public class BulkUploadService {
 
         try {
             List<Map<String, String>> rows = parseFile(file);
+            CourseClass targetClass = targetClassId != null ? courseClassRepository.findById(targetClassId).orElse(null) : null;
+            
             for (Map<String, String> studentData : rows) {
                 int rowNumber = totalRecords + 2; // 1-indexed, skip header
+                
+                // Skip empty rows (where all essential fields are empty)
+                String roll = studentData.getOrDefault("rollNumber", "").trim();
+                String fName = studentData.getOrDefault("firstName", "").trim();
+                String lName = studentData.getOrDefault("lastName", "").trim();
+                if (roll.isEmpty() && fName.isEmpty() && lName.isEmpty()) {
+                    continue; 
+                }
+                
                 totalRecords++;
                 try {
-                    validateStudentData(studentData, rowNumber, errors);
+                    validateStudentData(studentData, rowNumber, errors, targetClass);
                     if (errors.stream().noneMatch(e -> e.getRowNumber().equals(rowNumber))) {
                         validRecords.add(new ValidRecordPreview(rowNumber, studentData));
                         String dataJson = objectMapper.writeValueAsString(studentData);
@@ -105,11 +134,7 @@ public class BulkUploadService {
         log.setInvalidRecords(errors.size());
         log.setStatus(errors.isEmpty() && validRecords.size() > 0 ? UploadStatus.VALIDATED : UploadStatus.FAILED);
 
-        try {
-            log.setErrorSummary(objectMapper.writeValueAsString(errors));
-        } catch (JsonProcessingException e) {
-            log.setErrorSummary("Error serializing validation errors");
-        }
+        log.setErrorSummary(serializeErrors(errors));
 
         bulkUploadLogRepository.save(log);
 
@@ -119,30 +144,27 @@ public class BulkUploadService {
     /**
      * STEP 2: Confirm and execute student upload
      */
-    @Transactional(rollbackFor = Exception.class)
-    public int confirmStudentUpload(Long uploadLogId, Long confirmedBy) {
-        BulkUploadLog log = bulkUploadLogRepository.findById(uploadLogId)
-                .orElseThrow(() -> new RuntimeException("Upload log not found"));
-
-        if (log.getStatus() != UploadStatus.VALIDATED) {
-            throw new RuntimeException("Upload must be validated before confirmation");
+    @Transactional
+    public int confirmStudentUpload(Long uploadLogId, Long confirmedBy, Long targetClassId) {
+        BulkUploadLog log = bulkUploadLogRepository.findById(uploadLogId).orElse(null);
+        if (log == null) {
+            throw new RuntimeException("Upload log not found");
         }
 
-        if (log.getValidRecords() == 0) {
-            throw new RuntimeException("No valid records to import");
-        }
-
-        // Retrieve temp data
         List<TempUploadData> tempDataList = tempUploadDataRepository.findByUploadLogIdOrderByRowNum(uploadLogId);
-
         if (tempDataList.isEmpty()) {
             throw new RuntimeException("No temporary data found. Please re-validate upload.");
         }
 
         int count = 0;
-        List<Long> importedIds = new ArrayList<>();
-
         try {
+            // Get active year for class mapping
+            AcademicYear activeYear = academicYearRepository.findByActiveTrue()
+                .orElseGet(() -> academicYearRepository.findAll().stream()
+                        .sorted((a, b) -> b.getName().compareTo(a.getName()))
+                        .findFirst()
+                        .orElse(null));
+            
             for (TempUploadData tempData : tempDataList) {
                 Map<String, String> data = objectMapper.readValue(
                         tempData.getDataJson(),
@@ -152,19 +174,54 @@ public class BulkUploadService {
                 String rollNumber = data.getOrDefault("rollNumber", "").trim();
                 String username = rollNumber.toLowerCase();
 
-                // Double-check not already exists (could have been imported between validate
-                // and confirm)
-                if (userRepository.existsByUsername(username)) {
-                    continue;
+                // Check if user already exists
+                User user = userRepository.findByUsername(username).orElse(null);
+                if (user == null) {
+                    user = createUserFromStudentData(data);
+                    user = userRepository.save(user);
                 }
 
-                User user = createUserFromStudentData(data);
-                user = userRepository.save(user);
+                Student student = studentRepository.findByUser(user).orElse(null);
+                if (student == null) {
+                    student = createStudentFromData(data, user);
+                    student = studentRepository.save(student);
+                }
 
-                Student student = createStudentFromData(data, user);
-                student = studentRepository.save(student);
+                // Link to class - ALWAYS try to create mapping if targetClassId is provided
+                if (targetClassId != null) {
+                    System.out.println("BULK_IMPORT: Linking student " + rollNumber + " (ID:" + student.getId() + ") to class " + targetClassId);
+                    
+                    // Check if student is already in a class for the current academic year
+                    Optional<StudentClassMap> existingMap = studentClassMapRepository.findByStudentAndAcademicYear(student, activeYear);
+                    
+                    if (existingMap.isEmpty()) {
+                        CourseClass targetClass = courseClassRepository.findById(targetClassId).orElse(null);
+                        if (targetClass != null) {
+                            StudentClassMap map = new StudentClassMap();
+                            map.setStudent(student);
+                            map.setCourseClass(targetClass);
+                            if (activeYear != null) {
+                                map.setAcademicYear(activeYear);
+                            } else {
+                                // Create a fallback academic year if none exists
+                                AcademicYear fallback = new AcademicYear();
+                                fallback.setName("2025-2026");
+                                fallback.setActive(true);
+                                fallback = academicYearRepository.save(fallback);
+                                map.setAcademicYear(fallback);
+                            }
+                            studentClassMapRepository.save(map);
+                            System.out.println("BULK_IMPORT: Created StudentClassMap for student " + rollNumber + " -> class " + targetClass.getName());
+                        } else {
+                            System.err.println("BULK_IMPORT: Target class " + targetClassId + " not found!");
+                        }
+                    } else {
+                        System.out.println("BULK_IMPORT: Mapping already exists for student " + rollNumber + " -> class " + targetClassId);
+                    }
+                } else {
+                    System.out.println("BULK_IMPORT: No targetClassId provided, skipping class mapping for " + rollNumber);
+                }
 
-                importedIds.add(student.getId());
                 count++;
             }
 
@@ -256,6 +313,15 @@ public class BulkUploadService {
             List<Map<String, String>> rows = parseFile(file);
             for (Map<String, String> facultyData : rows) {
                 int rowNumber = totalRecords + 2;
+                
+                // Skip empty rows (where all essential fields are empty)
+                String facId = facultyData.getOrDefault("facultyId", "").trim();
+                String fName = facultyData.getOrDefault("firstName", "").trim();
+                String lName = facultyData.getOrDefault("lastName", "").trim();
+                if (facId.isEmpty() && fName.isEmpty() && lName.isEmpty()) {
+                    continue; 
+                }
+                
                 totalRecords++;
                 try {
                     validateFacultyData(facultyData, rowNumber, errors);
@@ -285,11 +351,7 @@ public class BulkUploadService {
         log.setInvalidRecords(errors.size());
         log.setStatus(UploadStatus.VALIDATED);
 
-        try {
-            log.setErrorSummary(objectMapper.writeValueAsString(errors));
-        } catch (JsonProcessingException e) {
-            log.setErrorSummary("Error serializing validation errors");
-        }
+        log.setErrorSummary(serializeErrors(errors));
 
         bulkUploadLogRepository.save(log);
 
@@ -299,7 +361,7 @@ public class BulkUploadService {
     /**
      * STEP 2: Confirm and execute faculty upload
      */
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional
     public int confirmFacultyUpload(Long uploadLogId, Long confirmedBy) {
         BulkUploadLog log = bulkUploadLogRepository.findById(uploadLogId)
                 .orElseThrow(() -> new RuntimeException("Upload log not found"));
@@ -363,6 +425,162 @@ public class BulkUploadService {
             log.setStatus(UploadStatus.FAILED);
             bulkUploadLogRepository.save(log);
             throw new RuntimeException("Import failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * STEP 1: Validate attendance upload
+     */
+    public BulkUploadValidationResult validateAttendanceUpload(MultipartFile file, Long uploadedBy, Long mappingId, String dateStr) throws IOException {
+        BulkUploadLog log = new BulkUploadLog(UploadType.ATTENDANCE, uploadedBy, file.getOriginalFilename());
+        log = bulkUploadLogRepository.save(log);
+
+        BulkUploadValidationResult result = new BulkUploadValidationResult();
+        result.setUploadLogId(log.getId());
+        result.setFileName(file.getOriginalFilename());
+
+        List<ValidRecordPreview> validRecords = new ArrayList<>();
+        List<ValidationError> errors = new ArrayList<>();
+        int totalRecords = 0;
+
+        LocalDate defaultDate = null;
+        try {
+            if (dateStr != null && !dateStr.isEmpty()) defaultDate = LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            // Invalid dateStr format, but we'll check rows later
+        }
+
+        try {
+            List<Map<String, String>> rows = parseFile(file);
+            for (Map<String, String> row : rows) {
+                int rowNumber = totalRecords + 2;
+                totalRecords++;
+                
+                String roll = row.getOrDefault("rollNumber", "").trim();
+                String rowDateStr = row.getOrDefault("date", "").trim();
+
+                if (roll.isEmpty()) {
+                    errors.add(new ValidationError(rowNumber, "rollNumber", "Roll number is required"));
+                    continue;
+                }
+
+                // Date validation
+                if (rowDateStr.isEmpty() && defaultDate == null) {
+                    errors.add(new ValidationError(rowNumber, "date", "Date is required (either in file or via selector)"));
+                    continue;
+                }
+
+                if (!rowDateStr.isEmpty()) {
+                    try {
+                        LocalDate.parse(rowDateStr);
+                    } catch (Exception e) {
+                        errors.add(new ValidationError(rowNumber, "date", "Invalid date format: " + rowDateStr + ". Use YYYY-MM-DD"));
+                        continue;
+                    }
+                }
+
+                // Check student exists
+                Optional<User> userOpt = userRepository.findByUsername(roll.toLowerCase());
+                if (userOpt.isEmpty()) {
+                    errors.add(new ValidationError(rowNumber, "rollNumber", "Student not found: " + roll));
+                    continue;
+                }
+
+                validRecords.add(new ValidRecordPreview(rowNumber, row));
+                String dataJson = objectMapper.writeValueAsString(row);
+                TempUploadData tempData = new TempUploadData(log.getId(), rowNumber, dataJson);
+                tempUploadDataRepository.save(tempData);
+            }
+        } catch (Exception e) {
+            errors.add(new ValidationError(0, "FILE", "Could not read file: " + e.getMessage()));
+        }
+
+        result.setTotalRecords(totalRecords);
+        result.setValidRecords(validRecords.size());
+        result.setInvalidRecords(errors.size());
+        result.setValidData(validRecords);
+        result.setErrors(errors);
+
+        log.setTotalRecords(totalRecords);
+        log.setValidRecords(validRecords.size());
+        log.setInvalidRecords(errors.size());
+        log.setStatus(UploadStatus.VALIDATED);
+        log.setErrorSummary(serializeErrors(errors));
+        bulkUploadLogRepository.save(log);
+
+        return result;
+    }
+
+    /**
+     * STEP 2: Confirm attendance upload
+     */
+    @Transactional
+    public int confirmAttendanceUpload(Long uploadLogId, Long confirmedBy, Long mappingId, String dateStr) {
+        BulkUploadLog log = bulkUploadLogRepository.findById(uploadLogId)
+                .orElseThrow(() -> new RuntimeException("Upload log not found"));
+
+        FacultySubjectMap map = facultySubjectMapRepository.findById(mappingId)
+                .orElseThrow(() -> new RuntimeException("Subject mapping not found"));
+
+        LocalDate defaultDate = null;
+        try {
+            if (dateStr != null && !dateStr.isEmpty()) defaultDate = LocalDate.parse(dateStr);
+        } catch (Exception e) {}
+
+        List<TempUploadData> tempDataList = tempUploadDataRepository.findByUploadLogIdOrderByRowNum(uploadLogId);
+        int count = 0;
+
+        Map<LocalDate, AttendanceSession> sessionCache = new HashMap<>();
+
+        try {
+            for (TempUploadData tempData : tempDataList) {
+                Map<String, String> data = objectMapper.readValue(tempData.getDataJson(), new TypeReference<Map<String, String>>() {});
+                String roll = data.get("rollNumber").trim().toLowerCase();
+                String statusStr = data.getOrDefault("status", "PRESENT").trim().toUpperCase();
+                
+                String rowDateStr = data.get("date");
+                LocalDate date = (rowDateStr != null && !rowDateStr.isEmpty()) 
+                    ? LocalDate.parse(rowDateStr.trim()) 
+                    : defaultDate;
+
+                if (date == null) continue;
+
+                User user = userRepository.findByUsername(roll).orElse(null);
+                if (user == null) continue;
+
+                Student student = studentRepository.findByUser(user).orElse(null);
+                if (student == null) continue;
+
+                // Get or create session (cached)
+                AttendanceSession session = sessionCache.computeIfAbsent(date, d -> getOrCreateSession(mappingId, map, d));
+
+                // Create or update record
+                AttendanceRecord record = attendanceRecordRepository.findBySessionAndStudent(session, student)
+                        .orElse(new AttendanceRecord());
+                
+                record.setSession(session);
+                record.setStudent(student);
+                record.setTimestamp(date.atTime(9, 15)); // Default timestamp
+                
+                if (statusStr.startsWith("P") || statusStr.contains("PRESENT")) {
+                    record.setStatus(AttendanceStatus.PRESENT);
+                } else {
+                    record.setStatus(AttendanceStatus.ABSENT);
+                }
+                record.setRemarks("Bulk Imported");
+                
+                attendanceRecordRepository.save(record);
+                count++;
+            }
+
+            log.setStatus(UploadStatus.CONFIRMED);
+            bulkUploadLogRepository.save(log);
+            tempUploadDataRepository.deleteByUploadLogId(uploadLogId);
+            return count;
+        } catch (Exception e) {
+            log.setStatus(UploadStatus.FAILED);
+            bulkUploadLogRepository.save(log);
+            throw new RuntimeException("Attendance import failed: " + e.getMessage());
         }
     }
 
@@ -474,23 +692,23 @@ public class BulkUploadService {
      */
     private void normalizeKeys(Map<String, String> row) {
         // Common header variants (Excel exports often use spaces / different casing)
-        remap(row, "firstName",       "First Name", "FIRST NAME", "firstname", "first_name", "givenName", "given_name");
-        remap(row, "lastName",        "Last Name", "LAST NAME", "lastname", "last_name", "surname", "familyName", "family_name");
-        remap(row, "fullName",        "Full Name", "FULL NAME", "name", "studentName", "facultyName");
+        remap(row, "firstName",       "First Name", "FIRST NAME", "firstname", "first_name", "givenName", "given_name", "first name");
+        remap(row, "lastName",        "Last Name", "LAST NAME", "lastname", "last_name", "surname", "familyName", "family_name", "last name");
+        remap(row, "fullName",        "Full Name", "FULL NAME", "name", "studentName", "facultyName", "full name");
         remap(row, "rollNumber",      "Roll No", "ROLL NO", "rollNo", "roll", "roll_no", "rollnumber");
-        remap(row, "facultyId",       "Faculty ID", "FACULTY ID", "employeeId", "employeeID", "empId", "empID");
-        remap(row, "departmentCode",  "Department", "DEPARTMENT", "dept", "deptCode", "dept_code", "department", "branch");
+        remap(row, "facultyId",       "Faculty ID", "FACULTY ID", "employeeId", "employeeID", "empId", "empID", "facultyid", "faculty id");
+        remap(row, "departmentCode",  "Department", "DEPARTMENT", "dept", "deptCode", "dept_code", "department", "branch", "departmentrole", "DepartmentCode", "departmentcode", "departementCode", "departementcode");
         remap(row, "email",           "Email", "EMAIL", "emailId", "email_id", "mail");
         remap(row, "gender",          "Gender", "GENDER", "sex");
-        remap(row, "admissionYear",   "Admission Year", "ADMISSION YEAR", "yearOfAdmission", "year_of_admission");
-        remap(row, "joiningDate",     "Joining Date", "JOINING DATE", "dateOfJoining", "date_of_joining");
-        remap(row, "qualifications",  "Qualification", "Qualifications", "QUALIFICATIONS");
-        remap(row, "designation",     "Designation", "DESIGNATION");
-        remap(row, "employmentStatus","Employment Status", "EMPLOYMENT STATUS", "status");
+        remap(row, "admissionYear",   "Admission Year", "ADMISSION YEAR", "yearOfAdmission", "year_of_admission", "admission year");
+        remap(row, "joiningDate",     "Joining Date", "JOINING DATE", "dateOfJoining", "date_of_joining", "joining date", "joiningDat");
+        remap(row, "qualifications",  "Qualification", "Qualifications", "QUALIFICATIONS", "qualification", "qualificatic");
+        remap(row, "designation",     "Designation", "DESIGNATION", "designation");
+        remap(row, "employmentStatus","Employment Status", "EMPLOYMENT STATUS", "status", "employmentStatus", "employment status");
         remap(row, "role",            "Role", "ROLE");
 
-        remap(row, "mobile",          "contactNumber", "phone", "mobileNumber");
-        remap(row, "semester",        "currentSemester");
+        remap(row, "mobile",          "contactNumber", "phone", "mobileNumber", "contactnumber");
+        remap(row, "semester",        "currentSemester", "currentSem", "sem", "current_sem");
         remap(row, "program",         "programType");
 
         // Normalize departmentCode values like "Computer Science & Engineering (CSE)" -> "CSE"
@@ -655,8 +873,8 @@ public class BulkUploadService {
     }
 
     // ==================== VALIDATION METHODS ====================
-
-    private void validateStudentData(Map<String, String> data, int rowNumber, List<ValidationError> errors) {
+    
+    private void validateStudentData(Map<String, String> data, int rowNumber, List<ValidationError> errors, CourseClass targetClass) {
         // Required fields validation
         String firstName = data.get("firstName") != null ? data.get("firstName").trim() : "";
         String lastName = data.get("lastName") != null ? data.get("lastName").trim() : "";
@@ -691,8 +909,24 @@ public class BulkUploadService {
         String program = data.get("program") != null ? data.get("program").trim() : "";
 
         // Check duplicate roll number
-        if (userRepository.existsByUsername(username)) {
-            errors.add(new ValidationError(rowNumber, "rollNumber", "Roll number already exists: " + rollNumber));
+        Optional<User> existingUser = userRepository.findByUsername(username);
+        if (existingUser.isPresent()) {
+            // If user exists, check if they are already in a class for the current academic year
+            AcademicYear activeYear = academicYearRepository.findByActiveTrue().orElse(null);
+            if (activeYear != null) {
+                Optional<Student> studentOpt = studentRepository.findByUser(existingUser.get());
+                if (studentOpt.isPresent()) {
+                    Optional<StudentClassMap> existingMap = studentClassMapRepository.findByStudentAndAcademicYear(studentOpt.get(), activeYear);
+                    if (existingMap.isPresent()) {
+                        CourseClass currentClass = existingMap.get().getCourseClass();
+                        if (targetClass == null || !currentClass.getId().equals(targetClass.getId())) {
+                            errors.add(new ValidationError(rowNumber, "rollNumber", 
+                                String.format("Student %s is already enrolled in class: %s for %s. A student can only be in one class at a time.", 
+                                    rollNumber, currentClass.getName(), activeYear.getName())));
+                        }
+                    }
+                }
+            }
         }
 
         // Check duplicate email
@@ -731,6 +965,50 @@ public class BulkUploadService {
         String status = data.get("status") != null ? data.get("status").trim() : "";
         if (!status.isEmpty() && !status.equalsIgnoreCase("ACTIVE") && !status.equalsIgnoreCase("INACTIVE")) {
             errors.add(new ValidationError(rowNumber, "status", "Status must be ACTIVE or INACTIVE: " + status));
+        }
+
+        // Validate against target class if provided
+        if (targetClass != null) {
+            String excelDept = normalizedDeptCode;
+            String excelSem = data.getOrDefault("semester", "").trim();
+            String excelSec = data.getOrDefault("section", "").trim();
+            
+            // Check Department
+            if (!targetClass.getDepartment().equalsIgnoreCase(excelDept)) {
+                errors.add(new ValidationError(rowNumber, "departmentCode", 
+                    String.format("Student department (%s) does not match the selected class department (%s)", 
+                        excelDept, targetClass.getDepartment())));
+            }
+            
+            // Check Semester/Year
+            if (!excelSem.isEmpty()) {
+                try {
+                    // Extract numeric part (e.g., "4 A" -> 4)
+                    String numericSem = excelSem.replaceAll("[^0-9]", "");
+                    if (numericSem.isEmpty()) throw new NumberFormatException("No digits found");
+                    
+                    int sem = Integer.parseInt(numericSem);
+                    int yearFromSem = (sem + 1) / 2;
+                    
+                    if (targetClass.getYearLevel() != sem && targetClass.getYearLevel() != yearFromSem) {
+                         // Fallback check: does name contain the semester number?
+                         if (!targetClass.getName().contains(numericSem)) {
+                             errors.add(new ValidationError(rowNumber, "semester", 
+                                 String.format("Student semester (%s) does not match selected class year level (%d). (Year %d normally covers semesters %d and %d)", 
+                                     excelSem, targetClass.getYearLevel(), targetClass.getYearLevel(), (targetClass.getYearLevel()*2)-1, targetClass.getYearLevel()*2)));
+                         }
+                    }
+                } catch (NumberFormatException e) {
+                    errors.add(new ValidationError(rowNumber, "semester", "Invalid semester number: " + excelSem));
+                }
+            }
+            
+            // Check Section (if target class has a section in its name e.g. "3A")
+            if (!excelSec.isEmpty() && !targetClass.getName().toUpperCase().contains(excelSec.toUpperCase())) {
+                errors.add(new ValidationError(rowNumber, "section", 
+                    String.format("Student section (%s) does not match selected class (%s)", 
+                        excelSec, targetClass.getName())));
+            }
         }
     }
 
@@ -925,6 +1203,17 @@ public class BulkUploadService {
                 return String.valueOf((long) cell.getNumericCellValue());
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                switch (cell.getCachedFormulaResultType()) {
+                    case STRING:
+                        return cell.getStringCellValue().trim();
+                    case NUMERIC:
+                        return String.valueOf((long) cell.getNumericCellValue());
+                    case BOOLEAN:
+                        return String.valueOf(cell.getBooleanCellValue());
+                    default:
+                        return "";
+                }
             default:
                 return "";
         }
@@ -994,4 +1283,261 @@ public class BulkUploadService {
 
         return faculty;
     }
+
+    private String serializeErrors(List<ValidationError> errors) {
+        if (errors == null || errors.isEmpty()) {
+            return null;
+        }
+        try {
+            // If too many errors, only log the first 200 to avoid "Data too long" issues
+            // and extremely large database entries
+            if (errors.size() > 200) {
+                List<ValidationError> subList = errors.subList(0, 200);
+                String json = objectMapper.writeValueAsString(subList);
+                return json.substring(0, json.length() - 1) + 
+                    ", {\"rowNumber\":0,\"field\":\"TRUNCATED\",\"errorMessage\":\"... and " + 
+                    (errors.size() - 200) + " more errors omitted for logging brevity\"}]";
+            }
+            return objectMapper.writeValueAsString(errors);
+        } catch (JsonProcessingException e) {
+            return "Error serializing validation errors: " + e.getMessage();
+        }
+    }
+
+    private AttendanceSession getOrCreateSession(Long mappingId, FacultySubjectMap map, LocalDate date) {
+        return attendanceSessionRepository.findByFacultySubjectMap_Id(mappingId).stream()
+                .filter(s -> s.getStartTime().toLocalDate().equals(date))
+                .findFirst()
+                .orElseGet(() -> {
+                    AttendanceSession s = new AttendanceSession();
+                    s.setFacultySubjectMap(map);
+                    s.setStartTime(date.atTime(9, 0)); // Default 9 AM
+                    s.setEndTime(date.atTime(10, 0));  // Default 10 AM
+                    s.setActive(false); // Past session is not active
+                    s.setRemarks("Bulk Imported Session");
+                    return attendanceSessionRepository.save(s);
+                });
+    }
+
+    // ==================== MONTHLY ATTENDANCE UPLOAD ====================
+
+    /**
+     * Validates a monthly attendance Excel upload.
+     * Expected format:
+     *   Row 1 (header): Roll No | 2026-05-01 | 2026-05-02 | ... | 2026-05-31
+     *   Row 2+:         24001   | P          | A          | ... | P
+     *
+     * Each cell value should be P (present) or A (absent). Empty cells are skipped.
+     */
+    public Map<String, Object> validateMonthlyAttendanceUpload(MultipartFile file, Long uploadedBy, Long mappingId) throws IOException {
+        BulkUploadLog log = new BulkUploadLog(UploadType.ATTENDANCE, uploadedBy, file.getOriginalFilename());
+        log = bulkUploadLogRepository.save(log);
+
+        List<Map<String, String>> flatRecords = new ArrayList<>();
+        List<ValidationError> errors = new ArrayList<>();
+        List<String> dateColumns = new ArrayList<>();
+        int totalStudents = 0;
+
+        FacultySubjectMap map = facultySubjectMapRepository.findById(mappingId).orElse(null);
+        if (map == null) {
+            errors.add(new ValidationError(0, "mappingId", "Subject mapping not found"));
+            return buildMonthlyResult(log, 0, 0, flatRecords, errors, dateColumns);
+        }
+
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Iterator<Row> rowIter = sheet.iterator();
+            if (!rowIter.hasNext()) {
+                errors.add(new ValidationError(0, "FILE", "Empty spreadsheet"));
+                return buildMonthlyResult(log, 0, 0, flatRecords, errors, dateColumns);
+            }
+
+            // Parse header row to extract date columns
+            Row headerRow = rowIter.next();
+            List<String> headers = new ArrayList<>();
+            for (Cell cell : headerRow) headers.add(getCellValue(cell).trim());
+
+            // First column should be roll number; remaining should be dates
+            for (int i = 1; i < headers.size(); i++) {
+                String h = headers.get(i);
+                LocalDate parsed = tryParseDate(h);
+                if (parsed != null) {
+                    dateColumns.add(parsed.toString());
+                } else {
+                    dateColumns.add(null); // Will skip this column
+                    errors.add(new ValidationError(1, h, "Column '" + h + "' is not a valid date (use YYYY-MM-DD or DD/MM/YYYY)"));
+                }
+            }
+
+            // Parse student rows
+            while (rowIter.hasNext()) {
+                Row currentRow = rowIter.next();
+                int rowNum = currentRow.getRowNum() + 1;
+                String roll = getCellValue(currentRow.getCell(0)).trim();
+                if (roll.isEmpty()) continue;
+                totalStudents++;
+
+                // Validate student exists
+                Optional<User> userOpt = userRepository.findByUsername(roll.toLowerCase());
+                if (userOpt.isEmpty()) {
+                    errors.add(new ValidationError(rowNum, "rollNumber", "Student not found: " + roll));
+                    continue;
+                }
+
+                // Process each date column
+                for (int i = 1; i < headers.size(); i++) {
+                    if (i - 1 >= dateColumns.size() || dateColumns.get(i - 1) == null) continue;
+
+                    String cellVal = getCellValue(currentRow.getCell(i)).trim().toUpperCase();
+                    if (cellVal.isEmpty()) continue; // Skip empty cells
+
+                    String status;
+                    if (cellVal.startsWith("P") || cellVal.equals("1")) {
+                        status = "PRESENT";
+                    } else if (cellVal.startsWith("A") || cellVal.equals("0")) {
+                        status = "ABSENT";
+                    } else {
+                        errors.add(new ValidationError(rowNum, dateColumns.get(i - 1), "Invalid value '" + cellVal + "' for " + roll + ". Use P or A."));
+                        continue;
+                    }
+
+                    Map<String, String> record = new LinkedHashMap<>();
+                    record.put("rollNumber", roll);
+                    record.put("date", dateColumns.get(i - 1));
+                    record.put("status", status);
+                    flatRecords.add(record);
+
+                    // Store in temp data
+                    String dataJson = objectMapper.writeValueAsString(record);
+                    TempUploadData tempData = new TempUploadData(log.getId(), flatRecords.size(), dataJson);
+                    tempUploadDataRepository.save(tempData);
+                }
+            }
+        }
+
+        return buildMonthlyResult(log, totalStudents, flatRecords.size(), flatRecords, errors, dateColumns.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toList()));
+    }
+
+    private Map<String, Object> buildMonthlyResult(BulkUploadLog log, int totalStudents, int totalRecords,
+                                                   List<Map<String, String>> records, List<ValidationError> errors, List<String> dates) {
+        log.setTotalRecords(totalRecords);
+        log.setValidRecords(records.size());
+        log.setInvalidRecords(errors.size());
+        log.setStatus(errors.isEmpty() && records.size() > 0 ? UploadStatus.VALIDATED : UploadStatus.FAILED);
+        log.setErrorSummary(serializeErrors(errors));
+        bulkUploadLogRepository.save(log);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("uploadLogId", log.getId());
+        result.put("fileName", log.getFileName());
+        result.put("totalStudents", totalStudents);
+        result.put("totalRecords", totalRecords);
+        result.put("validRecords", records.size());
+        result.put("invalidRecords", errors.size());
+        result.put("dates", dates);
+        result.put("errors", errors);
+
+        // Summary: count present/absent
+        long presentCount = records.stream().filter(r -> "PRESENT".equals(r.get("status"))).count();
+        long absentCount = records.stream().filter(r -> "ABSENT".equals(r.get("status"))).count();
+        result.put("presentCount", presentCount);
+        result.put("absentCount", absentCount);
+
+        return result;
+    }
+
+    /**
+     * Confirm monthly attendance upload — creates sessions and records.
+     */
+    @Transactional
+    public int confirmMonthlyAttendanceUpload(Long uploadLogId, Long confirmedBy, Long mappingId) {
+        BulkUploadLog log = bulkUploadLogRepository.findById(uploadLogId)
+                .orElseThrow(() -> new RuntimeException("Upload log not found"));
+
+        FacultySubjectMap map = facultySubjectMapRepository.findById(mappingId)
+                .orElseThrow(() -> new RuntimeException("Subject mapping not found"));
+
+        List<TempUploadData> tempDataList = tempUploadDataRepository.findByUploadLogIdOrderByRowNum(uploadLogId);
+        int count = 0;
+
+        Map<LocalDate, AttendanceSession> sessionCache = new HashMap<>();
+
+        try {
+            for (TempUploadData tempData : tempDataList) {
+                Map<String, String> data = objectMapper.readValue(tempData.getDataJson(), new TypeReference<Map<String, String>>() {});
+                String roll = data.get("rollNumber").trim().toLowerCase();
+                String statusStr = data.getOrDefault("status", "PRESENT").trim();
+                LocalDate date = LocalDate.parse(data.get("date").trim());
+
+                User user = userRepository.findByUsername(roll).orElse(null);
+                if (user == null) continue;
+
+                Student student = studentRepository.findByUser(user).orElse(null);
+                if (student == null) continue;
+
+                AttendanceSession session = sessionCache.computeIfAbsent(date, d -> getOrCreateSession(mappingId, map, d));
+
+                AttendanceRecord record = attendanceRecordRepository.findBySessionAndStudent(session, student)
+                        .orElse(new AttendanceRecord());
+
+                record.setSession(session);
+                record.setStudent(student);
+                record.setTimestamp(date.atTime(9, 15));
+
+                if ("PRESENT".equals(statusStr)) {
+                    record.setStatus(AttendanceStatus.PRESENT);
+                } else {
+                    record.setStatus(AttendanceStatus.ABSENT);
+                }
+                record.setRemarks("Monthly Bulk Import");
+
+                attendanceRecordRepository.save(record);
+                count++;
+            }
+
+            log.setStatus(UploadStatus.CONFIRMED);
+            bulkUploadLogRepository.save(log);
+            tempUploadDataRepository.deleteByUploadLogId(uploadLogId);
+
+            auditService.logAction(confirmedBy, "BulkUpload", uploadLogId, "MONTHLY_ATTENDANCE_CONFIRMED",
+                    null, count + " attendance records imported", null);
+
+            return count;
+        } catch (Exception e) {
+            log.setStatus(UploadStatus.FAILED);
+            bulkUploadLogRepository.save(log);
+            throw new RuntimeException("Monthly attendance import failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Tries to parse a date string in common formats.
+     */
+    private LocalDate tryParseDate(String s) {
+        if (s == null || s.isBlank()) return null;
+        s = s.trim();
+        // Try YYYY-MM-DD
+        try { return LocalDate.parse(s); } catch (Exception ignored) {}
+        // Try DD/MM/YYYY
+        try {
+            String[] parts = s.split("[/\\-.]");
+            if (parts.length == 3) {
+                int a = Integer.parseInt(parts[0]);
+                int b = Integer.parseInt(parts[1]);
+                int c = Integer.parseInt(parts[2]);
+                if (c > 1000) return LocalDate.of(c, b, a); // DD/MM/YYYY
+                if (a > 1000) return LocalDate.of(a, b, c); // YYYY/MM/DD
+            }
+        } catch (Exception ignored) {}
+        // Try Excel serial date number
+        try {
+            double serial = Double.parseDouble(s);
+            if (serial > 40000 && serial < 60000) {
+                java.util.Date d = org.apache.poi.ss.usermodel.DateUtil.getJavaDate(serial);
+                return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
 }
+

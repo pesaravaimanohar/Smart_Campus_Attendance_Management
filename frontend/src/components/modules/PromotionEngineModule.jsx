@@ -52,9 +52,10 @@ const PromotionEngineModule = ({ userDepartment }) => {
     const loadDepartments = useCallback(async () => {
         try {
             const data = await departmentAPI.getActive();
-            setDepartments(data);
+            setDepartments(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to load departments:', error);
+            setDepartments([]);
         }
     }, []);
 
@@ -62,11 +63,12 @@ const PromotionEngineModule = ({ userDepartment }) => {
         try {
             setIsLoading(true);
             const data = await promotionAPI.getEligibleStudents(selectedDepartment, selectedSemester);
-            setEligibleStudents(data);
+            const studentsArr = Array.isArray(data) ? data : [];
+            setEligibleStudents(studentsArr);
 
             // Initialize promotion data
             const initialData = {};
-            data.forEach(student => {
+            studentsArr.forEach(student => {
                 initialData[student.rollNumber] = {
                     passed: false,
                     backlogs: 0,
@@ -75,6 +77,7 @@ const PromotionEngineModule = ({ userDepartment }) => {
             setPromotionData(initialData);
         } catch (error) {
             console.error('Failed to load eligible students:', error);
+            setEligibleStudents([]);
         } finally {
             setIsLoading(false);
         }

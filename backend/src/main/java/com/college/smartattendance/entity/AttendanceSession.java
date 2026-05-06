@@ -11,13 +11,27 @@ public class AttendanceSession {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "faculty_subject_map_id", nullable = false)
+    @JoinColumn(name = "faculty_subject_map_id", nullable = true)
     private FacultySubjectMap facultySubjectMap;
+
+    @ManyToOne
+    @JoinColumn(name = "course_class_id", nullable = true)
+    private CourseClass courseClass;
+
+    @ManyToOne
+    @JoinColumn(name = "lab_subject_id", nullable = true)
+    private Subject labSubject;
 
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
     private boolean isActive;
+
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
+    private Boolean isLabSession = false;
+
+    @Column(nullable = true)
+    private Long createdByFacultyId;
 
     private Double latitude;
     private Double longitude;
@@ -25,6 +39,13 @@ public class AttendanceSession {
 
     @Column(unique = true)
     private String qrToken;
+
+    private String remarks;
+
+    private String period;
+
+    @Column(nullable = false, columnDefinition = "INT DEFAULT 1")
+    private Integer numberOfHours = 1;
 
     public AttendanceSession() {
     }
@@ -43,6 +64,14 @@ public class AttendanceSession {
 
     public void setFacultySubjectMap(FacultySubjectMap facultySubjectMap) {
         this.facultySubjectMap = facultySubjectMap;
+    }
+
+    public CourseClass getCourseClass() {
+        return courseClass;
+    }
+
+    public void setCourseClass(CourseClass courseClass) {
+        this.courseClass = courseClass;
     }
 
     public LocalDateTime getStartTime() {
@@ -99,5 +128,53 @@ public class AttendanceSession {
 
     public void setQrToken(String qrToken) {
         this.qrToken = qrToken;
+    }
+
+    public String getRemarks() {
+        return remarks;
+    }
+
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
+    }
+
+    public Subject getLabSubject() {
+        return labSubject;
+    }
+
+    public void setLabSubject(Subject labSubject) {
+        this.labSubject = labSubject;
+    }
+
+    public Boolean getIsLabSession() {
+        return isLabSession;
+    }
+
+    public void setIsLabSession(Boolean isLabSession) {
+        this.isLabSession = isLabSession;
+    }
+
+    public Long getCreatedByFacultyId() {
+        return createdByFacultyId;
+    }
+
+    public void setCreatedByFacultyId(Long createdByFacultyId) {
+        this.createdByFacultyId = createdByFacultyId;
+    }
+
+    public String getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(String period) {
+        this.period = period;
+    }
+
+    public Integer getNumberOfHours() {
+        return numberOfHours;
+    }
+
+    public void setNumberOfHours(Integer numberOfHours) {
+        this.numberOfHours = numberOfHours;
     }
 }

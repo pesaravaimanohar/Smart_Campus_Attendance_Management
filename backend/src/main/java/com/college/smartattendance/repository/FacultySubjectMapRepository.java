@@ -14,4 +14,7 @@ public interface FacultySubjectMapRepository extends JpaRepository<FacultySubjec
     List<FacultySubjectMap> findBySubject_Id(Long subjectId);
     List<FacultySubjectMap> findBySubject_IdAndSection(Long subjectId, String section);
     List<FacultySubjectMap> findByAcademicYear(AcademicYear academicYear);
+    List<FacultySubjectMap> findByCourseClass_Id(Long classId);
+    boolean existsByFaculty_IdAndCourseClass_Id(Long facultyId, Long classId);
+    void deleteByCourseClass_Id(Long classId);
 }

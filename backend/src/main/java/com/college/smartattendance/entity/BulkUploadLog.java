@@ -12,7 +12,7 @@ public class BulkUploadLog {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "upload_type", nullable = false)
+    @Column(name = "upload_type", nullable = false, length = 50)
     private UploadType uploadType;
 
     @Column(name = "uploaded_by", nullable = false)
@@ -31,10 +31,10 @@ public class BulkUploadLog {
     private Integer invalidRecords;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     private UploadStatus status;
 
-    @Column(name = "error_summary", columnDefinition = "TEXT")
+    @Column(name = "error_summary", columnDefinition = "LONGTEXT")
     private String errorSummary;
 
     @Column(name = "uploaded_at", nullable = false)

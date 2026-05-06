@@ -126,25 +126,43 @@ public class DataSeeder implements CommandLineRunner {
         Map<String, Program> result = new LinkedHashMap<>();
         
         for (Department dept : departments.values()) {
-            Program ug = programRepository.findAll().stream()
-                    .filter(p -> p.getName().equals("B.Tech " + dept.getCode()))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        Program p = new Program("B.Tech " + dept.getCode(), ProgramType.UG, 4, 8);
-                        p.setDepartment(dept);
-                        return programRepository.save(p);
-                    });
-            result.put(dept.getCode() + "_UG", ug);
+            String code = dept.getCode().toUpperCase();
+            boolean isPgOnly = code.equals("MBA") || code.startsWith("MT");
+
+            if (!isPgOnly) {
+                Program ug = programRepository.findAll().stream()
+                        .filter(p -> p.getName().equals("B.Tech " + dept.getCode()))
+                        .findFirst()
+                        .orElseGet(() -> {
+                            Program p = new Program("B.Tech " + dept.getCode(), ProgramType.UG, 4, 8);
+                            p.setDepartment(dept);
+                            return programRepository.save(p);
+                        });
+                result.put(dept.getCode() + "_UG", ug);
+            }
             
+            String prefix = isPgOnly ? "" : "M.Tech ";
             Program pg = programRepository.findAll().stream()
-                    .filter(p -> p.getName().equals("M.Tech " + dept.getCode()))
+                    .filter(p -> p.getName().equals(prefix + dept.getCode()))
                     .findFirst()
                     .orElseGet(() -> {
-                        Program p = new Program("M.Tech " + dept.getCode(), ProgramType.PG, 2, 4);
+                        Program p = new Program(prefix + dept.getCode(), ProgramType.PG, 2, 4);
                         p.setDepartment(dept);
                         return programRepository.save(p);
                     });
             result.put(dept.getCode() + "_PG", pg);
+
+            if (code.equals("CSE")) {
+                Program mca = programRepository.findAll().stream()
+                        .filter(p -> p.getName().equals("MCA"))
+                        .findFirst()
+                        .orElseGet(() -> {
+                            Program p = new Program("MCA", ProgramType.PG, 2, 4);
+                            p.setDepartment(dept);
+                            return programRepository.save(p);
+                        });
+                result.put(dept.getCode() + "_MCA", mca);
+            }
         }
         return result;
     }
@@ -154,16 +172,28 @@ public class DataSeeder implements CommandLineRunner {
         String[] depts = {"CSE", "ECE", "EEE", "CIVIL", "MECH", "IT"};
         
         for (String dept : depts) {
+            // UG Classes
             for (int year = 1; year <= 4; year++) {
-                specs.add(new CourseClassSpec(dept + "-UG-" + year + "A", yearString(year) + " B.Tech " + dept + "-A", dept, year));
-                specs.add(new CourseClassSpec(dept + "-UG-" + year + "B", yearString(year) + " B.Tech " + dept + "-B", dept, year));
+                specs.add(new CourseClassSpec(dept + "-UG-" + year + "A", yearString(year) + " B.Tech " + dept + "-A", dept, year, ProgramType.UG));
+                specs.add(new CourseClassSpec(dept + "-UG-" + year + "B", yearString(year) + " B.Tech " + dept + "-B", dept, year, ProgramType.UG));
+            }
+            // PG Classes (M.Tech)
+            for (int year = 1; year <= 2; year++) {
+                specs.add(new CourseClassSpec(dept + "-PG-" + year, yearString(year) + " M.Tech " + dept, dept, year, ProgramType.PG));
             }
         }
 
+        // Special PG Classes
+        for (int year = 1; year <= 2; year++) {
+            specs.add(new CourseClassSpec("CSE-MCA-" + year, yearString(year) + " MCA", "CSE", year, ProgramType.PG));
+        }
+
         Map<String, CourseClass> result = new LinkedHashMap<>();
-        specs.forEach(spec -> result.put(spec.key, ensureClass(spec.name, spec.departmentCode, spec.yearLevel)));
+        specs.forEach(spec -> result.put(spec.key, ensureClass(spec.name, spec.departmentCode, spec.yearLevel, spec.type)));
         return result;
     }
+
+    private record CourseClassSpec(String key, String name, String departmentCode, int yearLevel, ProgramType type) {}
     
     private String yearString(int year) {
         switch(year) {
@@ -175,7 +205,7 @@ public class DataSeeder implements CommandLineRunner {
         }
     }
 
-    private CourseClass ensureClass(String name, String department, int yearLevel) {
+    private CourseClass ensureClass(String name, String department, int yearLevel, ProgramType type) {
         return courseClassRepository.findAll().stream()
                 .filter(c -> c.getName().equalsIgnoreCase(name))
                 .findFirst()
@@ -184,25 +214,72 @@ public class DataSeeder implements CommandLineRunner {
                     c.setName(name);
                     c.setDepartment(department);
                     c.setYearLevel(yearLevel);
+                    c.setProgramType(type);
                     return courseClassRepository.save(c);
                 });
     }
 
     private Map<String, Subject> ensureSubjects(Map<String, Department> departments) {
         List<SubjectSpec> subjects = List.of(
+                // CSE
                 new SubjectSpec("Data Structures and Algorithms", "CSE101", "CSE"),
                 new SubjectSpec("Operating Systems", "CSE102", "CSE"),
                 new SubjectSpec("Database Management", "CSE103", "CSE"),
+                new SubjectSpec("Computer Networks", "CSE104", "CSE"),
+                new SubjectSpec("Software Engineering", "CSE105", "CSE"),
+                new SubjectSpec("Discrete Mathematics", "CSE106", "CSE"),
+                new SubjectSpec("Theory of Computation", "CSE107", "CSE"),
+                new SubjectSpec("Artificial Intelligence", "CSE108", "CSE"),
+                
+                // ECE
                 new SubjectSpec("Signals and Systems", "ECE101", "ECE"),
                 new SubjectSpec("Digital Electronics", "ECE102", "ECE"),
+                new SubjectSpec("Microprocessors", "ECE103", "ECE"),
+                new SubjectSpec("Communication Systems", "ECE104", "ECE"),
+                new SubjectSpec("Control Systems", "ECE105", "ECE"),
+                new SubjectSpec("Electromagnetic Fields", "ECE106", "ECE"),
+                new SubjectSpec("VLSI Design", "ECE107", "ECE"),
+                new SubjectSpec("Antennas", "ECE108", "ECE"),
+
+                // EEE
                 new SubjectSpec("Electrical Machines", "EEE101", "EEE"),
                 new SubjectSpec("Power Systems", "EEE102", "EEE"),
+                new SubjectSpec("Network Analysis", "EEE103", "EEE"),
+                new SubjectSpec("Control Engineering", "EEE104", "EEE"),
+                new SubjectSpec("Power Electronics", "EEE105", "EEE"),
+                new SubjectSpec("Measurements", "EEE106", "EEE"),
+                new SubjectSpec("Switchgear", "EEE107", "EEE"),
+                new SubjectSpec("Utilization", "EEE108", "EEE"),
+
+                // MECH
                 new SubjectSpec("Thermodynamics", "MECH101", "MECH"),
                 new SubjectSpec("Fluid Mechanics", "MECH102", "MECH"),
+                new SubjectSpec("Machine Design", "MECH103", "MECH"),
+                new SubjectSpec("Manufacturing Tech", "MECH104", "MECH"),
+                new SubjectSpec("Heat Transfer", "MECH105", "MECH"),
+                new SubjectSpec("Kinematics", "MECH106", "MECH"),
+                new SubjectSpec("Dynamics", "MECH107", "MECH"),
+                new SubjectSpec("CAD/CAM", "MECH108", "MECH"),
+
+                // CIVIL
                 new SubjectSpec("Structural Analysis", "CIVIL101", "CIVIL"),
                 new SubjectSpec("Concrete Technology", "CIVIL102", "CIVIL"),
+                new SubjectSpec("Surveying", "CIVIL103", "CIVIL"),
+                new SubjectSpec("Geotech Eng", "CIVIL104", "CIVIL"),
+                new SubjectSpec("Water Resources", "CIVIL105", "CIVIL"),
+                new SubjectSpec("Environmental Eng", "CIVIL106", "CIVIL"),
+                new SubjectSpec("Transportation Eng", "CIVIL107", "CIVIL"),
+                new SubjectSpec("Hydrology", "CIVIL108", "CIVIL"),
+
+                // IT
                 new SubjectSpec("Web Technologies", "IT101", "IT"),
-                new SubjectSpec("Computer Networks", "IT102", "IT")
+                new SubjectSpec("Computer Networks", "IT102", "IT"),
+                new SubjectSpec("Java Programming", "IT103", "IT"),
+                new SubjectSpec("Cloud Computing", "IT104", "IT"),
+                new SubjectSpec("Information Security", "IT105", "IT"),
+                new SubjectSpec("Data Warehousing", "IT106", "IT"),
+                new SubjectSpec("Mobile App Dev", "IT107", "IT"),
+                new SubjectSpec("Distributed Systems", "IT108", "IT")
         );
         Map<String, Subject> result = new LinkedHashMap<>();
         subjects.forEach(spec -> result.put(spec.code, ensureSubject(spec)));
@@ -310,7 +387,9 @@ public class DataSeeder implements CommandLineRunner {
             
             if (deptSubjects.isEmpty()) deptSubjects = subjectList; // fallback
 
-            for (int i = 0; i < Math.min(4, deptSubjects.size()); i++) {
+            // Assign 6-8 subjects per class
+            int subjectsPerClass = 6 + rand.nextInt(3); 
+            for (int i = 0; i < Math.min(subjectsPerClass, deptSubjects.size()); i++) {
                 Subject s = deptSubjects.get(i);
                 // Assign a faculty from the same department
                 List<Faculty> deptFaculty = facultyList.stream()
@@ -340,31 +419,57 @@ public class DataSeeder implements CommandLineRunner {
         for (int d = 0; d < deptCodes.length; d++) {
             String dept = deptCodes[d];
             String branchCode = deptsList[d];
-            Program program = programs.get(dept + "_UG");
+            Program ugProgram = programs.get(dept + "_UG");
+            Program pgProgram = programs.get(dept + "_PG");
             
+            // UG Students (60 per year)
             for (int yearLevel = 1; yearLevel <= 4; yearLevel++) {
                 int admissionYear = 2024 - yearLevel + 1;
                 String yearStr = String.valueOf(admissionYear).substring(2);
-                
                 CourseClass classA = classes.get(dept + "-UG-" + yearLevel + "A");
                 CourseClass classB = classes.get(dept + "-UG-" + yearLevel + "B");
-                
-                // 30 students per section (60 per class total)
                 for (int i = 1; i <= 60; i++) {
                     String section = (i <= 30) ? "A" : "B";
                     CourseClass currentClass = (i <= 30) ? classA : classB;
-                    
                     String fn = firstNames[rand.nextInt(firstNames.length)];
                     String ln = lastNames[rand.nextInt(lastNames.length)];
-                    
                     String rollSuffix = String.format("%02d", (i > 30 ? i - 30 : i));
                     String rollNum = yearStr + "X1A" + branchCode + (i > 30 ? "B" : "0") + rollSuffix;
                     String phone = "9" + String.format("%09d", rand.nextInt(1000000000));
-                    
                     int currentSem = (yearLevel - 1) * 2 + 1;
-                    
-                    students.add(new StudentSpec(rollNum, "student123", fn, ln, dept, currentClass, program, currentSem, section, admissionYear, phone));
+                    students.add(new StudentSpec(rollNum, "student123", fn, ln, dept, currentClass, ugProgram, currentSem, section, admissionYear, phone));
                 }
+            }
+
+            // PG Students (M.Tech) (10 per year)
+            for (int yearLevel = 1; yearLevel <= 2; yearLevel++) {
+                int admissionYear = 2024 - yearLevel + 1;
+                String yearStr = String.valueOf(admissionYear).substring(2);
+                CourseClass pgClass = classes.get(dept + "-PG-" + yearLevel);
+                for (int i = 1; i <= 10; i++) {
+                    String fn = firstNames[rand.nextInt(firstNames.length)];
+                    String ln = lastNames[rand.nextInt(lastNames.length)];
+                    String rollNum = yearStr + "X1D" + branchCode + String.format("%02d", i);
+                    String phone = "9" + String.format("%09d", rand.nextInt(1000000000));
+                    int currentSem = (yearLevel - 1) * 2 + 1;
+                    students.add(new StudentSpec(rollNum, "student123", fn, ln, dept, pgClass, pgProgram, currentSem, "A", admissionYear, phone));
+                }
+            }
+        }
+
+        // MCA Students (Special Case)
+        Program mcaProgram = programs.get("CSE_MCA");
+        for (int yearLevel = 1; yearLevel <= 2; yearLevel++) {
+            int admissionYear = 2024 - yearLevel + 1;
+            String yearStr = String.valueOf(admissionYear).substring(2);
+            CourseClass mcaClass = classes.get("CSE-MCA-" + yearLevel);
+            for (int i = 1; i <= 20; i++) {
+                String fn = firstNames[rand.nextInt(firstNames.length)];
+                String ln = lastNames[rand.nextInt(lastNames.length)];
+                String rollNum = yearStr + "X1F00" + String.format("%02d", i);
+                String phone = "9" + String.format("%09d", rand.nextInt(1000000000));
+                int currentSem = (yearLevel - 1) * 2 + 1;
+                students.add(new StudentSpec(rollNum, "student123", fn, ln, "CSE", mcaClass, mcaProgram, currentSem, "A", admissionYear, phone));
             }
         }
         
@@ -437,7 +542,7 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void ensureAttendanceData(AcademicYear year) {
-        if (attendanceSessionRepository.count() > 50) return; // Only seed if empty or very low
+        if (attendanceSessionRepository.count() > 500) return; // Only seed if empty or relatively low
 
         List<FacultySubjectMap> mappings = facultySubjectMapRepository.findByAcademicYear(year);
         Random rand = new Random(42);
@@ -446,14 +551,15 @@ public class DataSeeder implements CommandLineRunner {
 
         for (FacultySubjectMap map : mappings) {
             // Create 15-20 sessions per mapping for historical analysis
-            int sessionCount = 15 + rand.nextInt(6);
+            // Create 35-45 sessions per mapping (for ~2 months of classes)
+            int sessionCount = 35 + rand.nextInt(11);
             List<StudentClassMap> classStudents = studentClassMapRepository.findByCourseClass_IdAndAcademicYear_Id(
                     map.getCourseClass().getId(), year.getId());
 
             // Pre-identify some students as "defaulters" (consistent low attendance)
             Set<Long> defaulterIds = new HashSet<>();
             if (classStudents.size() > 5) {
-                int defCount = 2 + rand.nextInt(3);
+                int defCount = 3 + rand.nextInt(4);
                 for (int d = 0; d < defCount; d++) {
                     defaulterIds.add(classStudents.get(rand.nextInt(classStudents.size())).getStudent().getId());
                 }
@@ -462,8 +568,12 @@ public class DataSeeder implements CommandLineRunner {
             for (int i = 0; i < sessionCount; i++) {
                 AttendanceSession session = new AttendanceSession();
                 session.setFacultySubjectMap(map);
-                // Spread sessions over the last 30 days
-                session.setStartTime(java.time.LocalDateTime.now().minusDays(30 - (i * 1)).withHour(9 + rand.nextInt(6)).withMinute(0));
+                // Spread sessions over the last 60 days
+                session.setStartTime(java.time.LocalDateTime.now()
+                    .minusDays(60) 
+                    .plusHours(i * (rand.nextInt(20) + 10)) // Random distribution over time
+                    .withHour(9 + rand.nextInt(6))
+                    .withMinute(0));
                 session.setEndTime(session.getStartTime().plusHours(1));
                 session.setActive(false);
                 session.setLatitude(14.6819);
@@ -605,19 +715,7 @@ public class DataSeeder implements CommandLineRunner {
         }
     }
 
-    private static class CourseClassSpec {
-        final String key;
-        final String name;
-        final String departmentCode;
-        final int yearLevel;
 
-        CourseClassSpec(String key, String name, String departmentCode, int yearLevel) {
-            this.key = key;
-            this.name = name;
-            this.departmentCode = departmentCode;
-            this.yearLevel = yearLevel;
-        }
-    }
 
     private static class AssignmentSpec {
         final String facultyUsername;

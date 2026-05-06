@@ -20,4 +20,5 @@ public interface StudentSemesterHistoryRepository extends JpaRepository<StudentS
         list.sort(java.util.Comparator.comparing(StudentSemesterHistory::getSemesterNumber));
         return list;
     }
+    void deleteByStudent_Id(Long studentId);
 }

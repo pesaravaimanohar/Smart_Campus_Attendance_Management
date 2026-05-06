@@ -45,6 +45,15 @@ public class AdminService {
         courseClass.setName(classDto.getName());
         courseClass.setDepartment(classDto.getDepartment());
         courseClass.setYearLevel(classDto.getYearLevel());
+        if (classDto.getProgramType() != null) {
+            try {
+                courseClass.setProgramType(com.college.smartattendance.entity.ProgramType.valueOf(classDto.getProgramType().toUpperCase()));
+            } catch (Exception e) {
+                courseClass.setProgramType(com.college.smartattendance.entity.ProgramType.UG);
+            }
+        } else {
+            courseClass.setProgramType(com.college.smartattendance.entity.ProgramType.UG);
+        }
         return courseClassRepository.save(courseClass);
     }
 

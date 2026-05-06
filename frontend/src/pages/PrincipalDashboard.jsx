@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
     Typography, Box, Grid, Card, CardContent, Button, Avatar, Tooltip,
     useTheme, Fade, Chip, LinearProgress, Stack, Divider, Paper,
-    Table, TableHead, TableBody, TableRow, TableCell, TableContainer
+    Table, TableHead, TableBody, TableRow, TableCell, TableContainer,
+    IconButton
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -25,6 +26,8 @@ import {
     Groups as GroupsIcon,
     CalendarMonth as CalendarIcon,
     EmojiEvents as TrophyIcon,
+    QrCode2 as QrCodeIcon,
+    Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import StatsCard from '../components/StatsCard';
@@ -72,6 +75,10 @@ const PrincipalDashboard = () => {
         { id: 'reports', icon: <AssignmentIcon />, label: 'Reports' },
     ];
 
+    const handleSectionChange = (id) => {
+        setActiveSection(id);
+    };
+
     const currentLabel = menuItems.find(m => m.id === activeSection)?.label || 'Overview';
 
     // Custom Tooltip for AreaChart
@@ -97,12 +104,13 @@ const PrincipalDashboard = () => {
         <DashboardLayout
             title={currentLabel}
             subtitle={`Executive Dashboard • ${user?.collegeName || 'JNTUA College of Engineering'}`}
-            portalIcon={<ApartmentIcon />}
+            portalIcon={<TimelineIcon />}
             portalTitle="PRINCIPAL"
-            portalSubtitle="Executive View"
+            portalSubtitle="College Administration"
             menuItems={menuItems}
             activeSection={activeSection}
-            onSectionChange={setActiveSection}
+            onSectionChange={handleSectionChange}
+            notifications={criticalAlerts}
         >
             {activeSection === 'overview' && (
                 <Fade in timeout={400}>
@@ -365,16 +373,125 @@ const PrincipalDashboard = () => {
                 </Fade>
             )}
 
-            {activeSection !== 'overview' && (
-                <Fade in timeout={400}>
-                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh" flexDirection="column">
-                         <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 4 }}>
-                            <DashboardIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
-                         </motion.div>
-                        <Typography variant="h5" color="text.secondary" fontWeight={800}>{currentLabel}</Typography>
-                        <Typography color="text.disabled" sx={{ mt: 1 }}>Deep analytics for this module are being compiled.</Typography>
-                    </Box>
-                </Fade>
+            {activeSection === 'departments' && (
+                <Fade in timeout={400}><Box>
+                    <Typography variant="h5" fontWeight={800} gutterBottom>Department Overview</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Attendance performance across all departments</Typography>
+                    <Grid container spacing={2.5}>
+                        {(departments || []).map((dept, i) => {
+                            const sc = dept.avg >= 75 ? 'success' : dept.avg >= 65 ? 'warning' : 'error';
+                            return (
+                                <Grid item xs={12} sm={6} md={4} key={i}>
+                                    <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', transition: 'all 0.2s',
+                                        '&:hover': { transform: 'translateY(-4px)', boxShadow: `0 8px 30px ${alpha(theme.palette.primary.main, 0.12)}` } }}>
+                                        <Box sx={{ p: 2.5, background: `linear-gradient(135deg, ${alpha(theme.palette[sc].main, 0.08)}, transparent)`,
+                                            borderBottom: '1px solid', borderColor: 'divider' }}>
+                                            <Box display="flex" alignItems="center" gap={1.5}>
+                                                <Avatar sx={{ bgcolor: alpha(theme.palette[sc].main, 0.15), color: `${sc}.main`, width: 44, height: 44 }}>
+                                                    <BusinessIcon />
+                                                </Avatar>
+                                                <Box flex={1}>
+                                                    <Typography variant="subtitle1" fontWeight={700}>{dept.name}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">{dept.code}</Typography>
+                                                </Box>
+                                            </Box>
+                                        </Box>
+                                        <CardContent sx={{ p: 2.5 }}>
+                                            <Box mb={2}>
+                                                <Box display="flex" justifyContent="space-between" mb={0.5}>
+                                                    <Typography variant="caption" color="text.secondary">Avg Attendance</Typography>
+                                                    <Typography variant="caption" fontWeight={700} color={`${sc}.main`}>{dept.avg}%</Typography>
+                                                </Box>
+                                                <LinearProgress variant="determinate" value={Math.min(dept.avg, 100)} color={sc}
+                                                    sx={{ height: 6, borderRadius: 3, bgcolor: alpha(theme.palette[sc].main, 0.1) }} />
+                                            </Box>
+                                            <Stack spacing={1}>
+                                                <Box display="flex" justifyContent="space-between">
+                                                    <Typography variant="caption" color="text.secondary">Students</Typography>
+                                                    <Typography variant="caption" fontWeight={600}>{dept.students || 0}</Typography>
+                                                </Box>
+                                                <Box display="flex" justifyContent="space-between">
+                                                    <Typography variant="caption" color="text.secondary">Faculty</Typography>
+                                                    <Typography variant="caption" fontWeight={600}>{dept.faculty || 0}</Typography>
+                                                </Box>
+                                                <Box display="flex" justifyContent="space-between">
+                                                    <Typography variant="caption" color="text.secondary">Sessions</Typography>
+                                                    <Chip label={dept.sessions || 0} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700 }} />
+                                                </Box>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            );
+                        })}
+                    </Grid>
+                </Box></Fade>
+            )}
+
+            {activeSection === 'reports' && (
+                <Fade in timeout={400}><Box>
+                    <Typography variant="h5" fontWeight={800} gutterBottom>College Reports</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Summary and comparative analysis</Typography>
+                    <Grid container spacing={3}>
+                        <Grid item xs={12}>
+                            <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                                <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                    <Typography variant="subtitle1" fontWeight={700}>Department Comparison</Typography>
+                                </Box>
+                                <TableContainer><Table>
+                                    <TableHead><TableRow>
+                                        <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Students</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Faculty</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Sessions</TableCell>
+                                        <TableCell align="center" sx={{ fontWeight: 700 }}>Avg Attendance</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700 }}>Status</TableCell>
+                                    </TableRow></TableHead>
+                                    <TableBody>{(departments || []).map((dept, i) => {
+                                        const sc = dept.avg >= 75 ? 'success' : dept.avg >= 65 ? 'warning' : 'error';
+                                        return (
+                                            <TableRow key={i} hover>
+                                                <TableCell><Typography variant="body2" fontWeight={600}>{dept.name}</Typography></TableCell>
+                                                <TableCell align="center">{dept.students || 0}</TableCell>
+                                                <TableCell align="center">{dept.faculty || 0}</TableCell>
+                                                <TableCell align="center">{dept.sessions || 0}</TableCell>
+                                                <TableCell align="center">
+                                                    <Box display="flex" alignItems="center" gap={1} justifyContent="center">
+                                                        <LinearProgress variant="determinate" value={Math.min(dept.avg, 100)} color={sc} sx={{ width: 60, height: 6, borderRadius: 3 }} />
+                                                        <Typography variant="body2" fontWeight={700} color={`${sc}.main`}>{dept.avg}%</Typography>
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell align="right">
+                                                    <Chip label={dept.avg >= 75 ? 'Good' : dept.avg >= 65 ? 'Warning' : 'Critical'} size="small" color={sc} sx={{ fontWeight: 700 }} />
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}</TableBody>
+                                </Table></TableContainer>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <Card sx={{ borderRadius: 3, p: 3, border: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="subtitle1" fontWeight={700} gutterBottom>College Summary</Typography>
+                                <Stack spacing={2}>
+                                    <Box display="flex" justifyContent="space-between"><Typography variant="body2" color="text.secondary">College Attendance</Typography><Typography fontWeight={700} color={collegeAttendance >= 75 ? 'success.main' : 'warning.main'}>{collegeAttendance}%</Typography></Box>
+                                    <Box display="flex" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Total Faculty</Typography><Typography fontWeight={700}>{totalFaculty}</Typography></Box>
+                                    <Box display="flex" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Active Sessions</Typography><Typography fontWeight={700}>{activeSessions}</Typography></Box>
+                                    <Box display="flex" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Critical Alerts</Typography><Typography fontWeight={700} color="error.main">{criticalAlerts}</Typography></Box>
+                                </Stack>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <Card sx={{ borderRadius: 3, p: 3, border: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="subtitle1" fontWeight={700} gutterBottom>Quick Actions</Typography>
+                                <Stack spacing={1.5}>
+                                    <Button variant="outlined" fullWidth sx={{ borderRadius: 2, fontWeight: 600 }} onClick={() => setActiveSection('departments')}>View Departments</Button>
+                                    <Button variant="outlined" fullWidth sx={{ borderRadius: 2, fontWeight: 600 }} onClick={() => setActiveSection('overview')}>Back to Overview</Button>
+                                </Stack>
+                            </Card>
+                        </Grid>
+                    </Grid>
+                </Box></Fade>
             )}
         </DashboardLayout>
     );

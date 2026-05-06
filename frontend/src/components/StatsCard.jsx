@@ -86,7 +86,7 @@ const StatsCard = ({
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 position: 'relative',
                 overflow: 'hidden',
-                animation: `fadeInUp 0.5s ease-out ${animationDelay * 0.08}s both`,
+                animation: `fadeInUp 0.4s ease-out ${animationDelay * 0.001}s both`,
                 '@keyframes fadeInUp': {
                     from: { opacity: 0, transform: 'translateY(20px)' },
                     to: { opacity: 1, transform: 'translateY(0)' },

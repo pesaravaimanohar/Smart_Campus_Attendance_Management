@@ -17,9 +17,13 @@ public interface StudentClassMapRepository extends JpaRepository<StudentClassMap
     List<StudentClassMap> findByStudent_Id(Long studentId);
     List<StudentClassMap> findByCourseClass_Id(Long classId);
     List<StudentClassMap> findByCourseClass_IdAndAcademicYear_Id(Long classId, Long academicYearId);
+    List<StudentClassMap> findByStudent_IdAndAcademicYear_Id(Long studentId, Long academicYearId);
     long countByCourseClass_Id(Long classId);
 
     @Query("SELECT scm FROM StudentClassMap scm WHERE scm.student.departmentEntity.id = :deptId AND scm.student.currentSemester = :semester")
     List<StudentClassMap> findByDepartmentAndSemester(@Param("deptId") Long departmentId, @Param("semester") Integer semester);
+
+    void deleteByCourseClass_Id(Long classId);
+    void deleteByStudent_Id(Long studentId);
 }
 
