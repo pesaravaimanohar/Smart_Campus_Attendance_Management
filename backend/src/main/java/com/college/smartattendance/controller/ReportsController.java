@@ -272,7 +272,14 @@ public class ReportsController {
         for (Faculty f : faculties) {
             List<AttendanceSession> allSessions = attendanceSessionRepository.findAll();
             List<AttendanceSession> sessions = allSessions.stream()
-                    .filter(s -> s.getFacultySubjectMap().getFaculty().getId().equals(f.getId()))
+                    .filter(s -> {
+                        if (s.getFacultySubjectMap() != null) {
+                            return s.getFacultySubjectMap().getFaculty().getId().equals(f.getId());
+                        } else if (Boolean.TRUE.equals(s.getIsLabSession())) {
+                            return f.getId().equals(s.getCreatedByFacultyId());
+                        }
+                        return false;
+                    })
                     .collect(Collectors.toList());
             
             if (sessions.isEmpty()) continue;

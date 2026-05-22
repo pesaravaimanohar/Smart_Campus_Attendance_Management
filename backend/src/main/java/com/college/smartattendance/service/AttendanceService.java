@@ -28,6 +28,9 @@ public class AttendanceService {
         private FacultySubjectMapRepository facultySubjectMapRepository;
 
         @Autowired
+        private FacultyRepository facultyRepository;
+
+        @Autowired
         private StudentClassMapRepository studentClassMapRepository;
 
         @Autowired
@@ -131,6 +134,10 @@ public class AttendanceService {
                 AttendanceSession session = sessionRepository.findById(sessionId)
                                 .orElseThrow(() -> new RuntimeException("Session not found"));
 
+                if (Boolean.TRUE.equals(session.getIsLabSession())) {
+                        return endLabSession(sessionId);
+                }
+
                 session.setActive(false);
                 session.setEndTime(LocalDateTime.now());
                 session.setQrToken(null);
@@ -176,16 +183,34 @@ public class AttendanceService {
                 }
 
                 FacultySubjectMap map = session.getFacultySubjectMap();
-                User facultyUser = map.getFaculty().getUser();
+                User facultyUser = null;
+                if (map != null) {
+                        facultyUser = map.getFaculty().getUser();
+                } else if (session.getCreatedByFacultyId() != null) {
+                        facultyUser = facultyRepository.findById(session.getCreatedByFacultyId())
+                                        .map(Faculty::getUser)
+                                        .orElse(null);
+                }
 
                 SessionInfoDto dto = new SessionInfoDto();
                 dto.setSessionId(session.getId());
-                dto.setSubjectName(map.getSubject().getName());
-                dto.setSubjectCode(map.getSubject().getCode());
-                dto.setClassName(map.getCourseClass().getName());
-                String fullName = (facultyUser.getFirstName() != null ? facultyUser.getFirstName() : "")
-                                + " " + (facultyUser.getLastName() != null ? facultyUser.getLastName() : "");
-                dto.setFacultyName(fullName.trim());
+                if (map != null) {
+                        dto.setSubjectName(map.getSubject().getName());
+                        dto.setSubjectCode(map.getSubject().getCode());
+                        dto.setClassName(map.getCourseClass().getName());
+                } else {
+                        dto.setSubjectName(session.getLabSubject() != null ? session.getLabSubject().getName() : "Lab Session");
+                        dto.setSubjectCode(session.getLabSubject() != null ? session.getLabSubject().getCode() : "LAB");
+                        dto.setClassName(session.getCourseClass() != null ? session.getCourseClass().getName() : "N/A");
+                }
+                
+                if (facultyUser != null) {
+                        String fullName = (facultyUser.getFirstName() != null ? facultyUser.getFirstName() : "")
+                                        + " " + (facultyUser.getLastName() != null ? facultyUser.getLastName() : "");
+                        dto.setFacultyName(fullName.trim());
+                } else {
+                        dto.setFacultyName("Unknown Faculty");
+                }
                 dto.setStartTime(session.getStartTime());
                 dto.setEndTime(session.getEndTime());
                 dto.setActive(true);
@@ -212,9 +237,10 @@ public class AttendanceService {
 
                 // 4. Check if student belongs to this class
                 FacultySubjectMap map = session.getFacultySubjectMap();
-                CourseClass sessionClass = map.getCourseClass();
+                CourseClass sessionClass = map != null ? map.getCourseClass() : session.getCourseClass();
+                String section = map != null ? map.getSection() : null;
 
-                boolean belongsToClass = checkStudentBelongsToClass(student, sessionClass, map.getSection());
+                boolean belongsToClass = checkStudentBelongsToClass(student, sessionClass, section);
 
                 if (!belongsToClass) {
                         throw new RuntimeException("You are not enrolled in this class. Only " 
@@ -534,15 +560,28 @@ public class AttendanceService {
                                 .map(session -> {
                                         com.college.smartattendance.dto.TodaySessionDto dto = new com.college.smartattendance.dto.TodaySessionDto();
                                         dto.setSessionId(session.getId());
-                                        dto.setSubjectName(session.getFacultySubjectMap().getSubject().getName());
-                                        User facultyUser = session.getFacultySubjectMap().getFaculty().getUser();
-                                        String fullName = (facultyUser.getFirstName() != null
-                                                        ? facultyUser.getFirstName()
-                                                        : "") +
-                                                        " "
-                                                        + (facultyUser.getLastName() != null ? facultyUser.getLastName()
-                                                                        : "");
-                                        dto.setFacultyName(fullName.trim());
+                                        
+                                        FacultySubjectMap map = session.getFacultySubjectMap();
+                                        User facultyUser = null;
+                                        if (map != null) {
+                                                dto.setSubjectName(map.getSubject().getName());
+                                                facultyUser = map.getFaculty().getUser();
+                                        } else {
+                                                dto.setSubjectName(session.getLabSubject() != null ? session.getLabSubject().getName() : "Lab Session");
+                                                if (session.getCreatedByFacultyId() != null) {
+                                                        facultyUser = facultyRepository.findById(session.getCreatedByFacultyId())
+                                                                        .map(Faculty::getUser)
+                                                                        .orElse(null);
+                                                }
+                                        }
+
+                                        if (facultyUser != null) {
+                                                String fullName = (facultyUser.getFirstName() != null ? facultyUser.getFirstName() : "")
+                                                                + " " + (facultyUser.getLastName() != null ? facultyUser.getLastName() : "");
+                                                dto.setFacultyName(fullName.trim());
+                                        } else {
+                                                dto.setFacultyName("Unknown Faculty");
+                                        }
                                         dto.setStartTime(session.getStartTime());
                                         dto.setEndTime(session.getEndTime());
 
@@ -577,8 +616,13 @@ public class AttendanceService {
                                 .map(record -> {
                                         com.college.smartattendance.dto.AttendanceHistoryDto dto = new com.college.smartattendance.dto.AttendanceHistoryDto();
                                         dto.setDate(record.getTimestamp());
-                                        dto.setSubjectName(record.getSession().getFacultySubjectMap().getSubject()
-                                                        .getName());
+                                        
+                                        FacultySubjectMap map = record.getSession().getFacultySubjectMap();
+                                        if (map != null) {
+                                                dto.setSubjectName(map.getSubject().getName());
+                                        } else {
+                                                dto.setSubjectName(record.getSession().getLabSubject() != null ? record.getSession().getLabSubject().getName() : "Lab Session");
+                                        }
 
                                         switch (record.getStatus()) {
                                                 case PRESENT:
@@ -655,7 +699,8 @@ public class AttendanceService {
                 for (AttendanceSession session : yesterdaySessions) {
                         boolean marked = recordRepository.findBySessionAndStudent(session, student).isPresent();
                         if (!marked) {
-                            String subName = session.getFacultySubjectMap() != null ? session.getFacultySubjectMap().getSubject().getName() : "Lab";
+                             String subName = session.getFacultySubjectMap() != null ? session.getFacultySubjectMap().getSubject().getName()
+                                                    : (session.getLabSubject() != null ? session.getLabSubject().getName() : "Lab");
                             String msg = "⚠️ You missed attendance for " + subName + " yesterday";
                             String key = "MISSED_SESSION:" + session.getId();
                             

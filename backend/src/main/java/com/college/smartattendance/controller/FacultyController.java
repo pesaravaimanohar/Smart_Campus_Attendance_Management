@@ -231,8 +231,11 @@ public class FacultyController {
                         // We need to know total students in the class
                         long totalClassStudents = 0;
                         try {
-                            totalClassStudents = studentClassMapRepository
-                                    .countByCourseClass_Id(s.getFacultySubjectMap().getCourseClass().getId());
+                            Long classId = s.getFacultySubjectMap() != null ? s.getFacultySubjectMap().getCourseClass().getId()
+                                    : (s.getCourseClass() != null ? s.getCourseClass().getId() : null);
+                            if (classId != null) {
+                                totalClassStudents = studentClassMapRepository.countByCourseClass_Id(classId);
+                            }
                         } catch (Exception e) {
                             // fallback
                         }
