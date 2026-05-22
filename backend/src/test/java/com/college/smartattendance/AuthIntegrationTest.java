@@ -31,12 +31,12 @@ class AuthIntegrationTest {
     @CsvSource({
             "admin,admin123,ADMIN",
             "PRN001,principal123,PRINCIPAL",
-            "HOD001,hod123,HOD",
+            "HOD_CSE,hod123,HOD",
             "FAC_CSE01,faculty123,FACULTY",
             "FAC_ECE01,faculty123,FACULTY",
-            "22X1A0501,student123,STUDENT",
-            "P23CSE001,student123,STUDENT",
-            "MBA23001,student123,STUDENT"
+            "22X1A05001,student123,STUDENT",
+            "23X1D0501,student123,STUDENT",
+            "23X1F0001,student123,STUDENT"
     })
     void seededUsersCanLogIn(String username, String password, String role) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(

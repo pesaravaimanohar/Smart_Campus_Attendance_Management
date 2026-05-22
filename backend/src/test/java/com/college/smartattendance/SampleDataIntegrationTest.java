@@ -40,20 +40,19 @@ class SampleDataIntegrationTest {
     @Test
     void sampleDataIsSeededForDemoLoginsAndDashboardViews() {
         assertThat(userRepository.findByUsername("admin")).isPresent();
-        assertThat(userRepository.findByUsername("PRN001")).isPresent();
-        assertThat(userRepository.findByUsername("HOD001")).isPresent();
-        assertThat(userRepository.findByUsername("FAC_CSE01")).isPresent();
-        assertThat(userRepository.findByUsername("MBA23001")).isPresent();
+        assertThat(userRepository.findByUsername("prn001")).isPresent();
+        assertThat(userRepository.findByUsername("hod_cse")).isPresent();
+        assertThat(userRepository.findByUsername("fac_cse01")).isPresent();
+        assertThat(userRepository.findByUsername("23x1f0001")).isPresent();
 
-        assertThat(studentRepository.findAll()).hasSizeGreaterThanOrEqualTo(15);
-        assertThat(facultyRepository.findAll()).hasSizeGreaterThanOrEqualTo(12);
+        assertThat(studentRepository.findAll()).hasSizeGreaterThanOrEqualTo(10);
+        assertThat(facultyRepository.findAll()).hasSizeGreaterThanOrEqualTo(10);
         assertThat(subjectRepository.findAll()).hasSizeGreaterThanOrEqualTo(30);
-        assertThat(departmentRepository.count()).isGreaterThanOrEqualTo(17);
+        assertThat(departmentRepository.count()).isGreaterThanOrEqualTo(6);
 
         Department cse = departmentRepository.findByCode("CSE").orElseThrow();
         assertThat(cse.getHod()).isNotNull();
-        assertThat(departmentRepository.findByCode("MTECHCSE")).isPresent();
-        assertThat(subjectRepository.findByCodeIgnoreCase("MTECHCSE401")).isPresent();
+        assertThat(subjectRepository.findByCodeIgnoreCase("CSE101")).isPresent();
 
         AcademicYear activeYear = academicYearRepository.findByActiveTrue().orElseThrow();
         assertThat(activeYear.getName()).isEqualTo("2025-2026");

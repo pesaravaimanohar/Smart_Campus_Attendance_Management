@@ -14,6 +14,7 @@ import com.college.smartattendance.repository.UserRepository;
 import com.college.smartattendance.repository.CourseClassRepository;
 import com.college.smartattendance.repository.ProgramRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "false", matchIfMissing = true)
 public class SystemInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;

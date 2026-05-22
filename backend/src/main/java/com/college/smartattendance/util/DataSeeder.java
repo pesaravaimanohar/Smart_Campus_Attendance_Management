@@ -2,6 +2,7 @@ package com.college.smartattendance.util;
 
 import com.college.smartattendance.entity.*;
 import com.college.smartattendance.repository.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +32,18 @@ public class DataSeeder implements CommandLineRunner {
     private final AttendanceSessionRepository attendanceSessionRepository;
     private final AttendanceRecordRepository attendanceRecordRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.seed.ug-students-per-year:60}")
+    private int ugStudentsPerYear;
+
+    @Value("${app.seed.pg-students-per-year:10}")
+    private int pgStudentsPerYear;
+
+    @Value("${app.seed.mca-students-per-year:20}")
+    private int mcaStudentsPerYear;
+
+    @Value("${app.seed.sessions-per-mapping:35}")
+    private int sessionsPerMapping;
 
     private final Set<String> credentialLines = new LinkedHashSet<>();
 
@@ -348,13 +361,14 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private Faculty ensureFaculty(FacultySpec spec, Department department) {
-        User user = ensureUser(spec.username, spec.password, spec.role, spec.firstName, spec.lastName, spec.email, spec.phone);
+        String normalizedUsername = spec.username != null ? spec.username.trim().toLowerCase() : "";
+        User user = ensureUser(normalizedUsername, spec.password, spec.role, spec.firstName, spec.lastName, spec.email, spec.phone);
         return facultyRepository.findByUser(user)
-                .map(existing -> updateFaculty(existing, spec, department))
+                .map(existing -> updateFaculty(existing, normalizedUsername, department, spec.designation))
                 .orElseGet(() -> {
                     Faculty faculty = new Faculty();
                     faculty.setUser(user);
-                    faculty.setFacultyId(spec.username);
+                    faculty.setFacultyId(normalizedUsername);
                     faculty.setDepartment(department.getCode());
                     faculty.setDepartmentEntity(department);
                     faculty.setDesignation(spec.designation);
@@ -364,11 +378,11 @@ public class DataSeeder implements CommandLineRunner {
                 });
     }
 
-    private Faculty updateFaculty(Faculty faculty, FacultySpec spec, Department department) {
-        faculty.setFacultyId(spec.username);
+    private Faculty updateFaculty(Faculty faculty, String facultyId, Department department, String designation) {
+        faculty.setFacultyId(facultyId);
         faculty.setDepartment(department.getCode());
         faculty.setDepartmentEntity(department);
-        faculty.setDesignation(spec.designation);
+        faculty.setDesignation(designation);
         faculty.setEmploymentStatus(EmploymentStatus.ACTIVE);
         return facultyRepository.save(faculty);
     }
@@ -428,13 +442,14 @@ public class DataSeeder implements CommandLineRunner {
                 String yearStr = String.valueOf(admissionYear).substring(2);
                 CourseClass classA = classes.get(dept + "-UG-" + yearLevel + "A");
                 CourseClass classB = classes.get(dept + "-UG-" + yearLevel + "B");
-                for (int i = 1; i <= 60; i++) {
-                    String section = (i <= 30) ? "A" : "B";
-                    CourseClass currentClass = (i <= 30) ? classA : classB;
+                int half = (ugStudentsPerYear + 1) / 2;
+                for (int i = 1; i <= ugStudentsPerYear; i++) {
+                    String section = (i <= half) ? "A" : "B";
+                    CourseClass currentClass = (i <= half) ? classA : classB;
                     String fn = firstNames[rand.nextInt(firstNames.length)];
                     String ln = lastNames[rand.nextInt(lastNames.length)];
-                    String rollSuffix = String.format("%02d", (i > 30 ? i - 30 : i));
-                    String rollNum = yearStr + "X1A" + branchCode + (i > 30 ? "B" : "0") + rollSuffix;
+                    String rollSuffix = String.format("%02d", (i > half ? i - half : i));
+                    String rollNum = yearStr + "X1A" + branchCode + (i > half ? "B" : "0") + rollSuffix;
                     String phone = "9" + String.format("%09d", rand.nextInt(1000000000));
                     int currentSem = (yearLevel - 1) * 2 + 1;
                     students.add(new StudentSpec(rollNum, "student123", fn, ln, dept, currentClass, ugProgram, currentSem, section, admissionYear, phone));
@@ -446,7 +461,7 @@ public class DataSeeder implements CommandLineRunner {
                 int admissionYear = 2024 - yearLevel + 1;
                 String yearStr = String.valueOf(admissionYear).substring(2);
                 CourseClass pgClass = classes.get(dept + "-PG-" + yearLevel);
-                for (int i = 1; i <= 10; i++) {
+                for (int i = 1; i <= pgStudentsPerYear; i++) {
                     String fn = firstNames[rand.nextInt(firstNames.length)];
                     String ln = lastNames[rand.nextInt(lastNames.length)];
                     String rollNum = yearStr + "X1D" + branchCode + String.format("%02d", i);
@@ -463,7 +478,7 @@ public class DataSeeder implements CommandLineRunner {
             int admissionYear = 2024 - yearLevel + 1;
             String yearStr = String.valueOf(admissionYear).substring(2);
             CourseClass mcaClass = classes.get("CSE-MCA-" + yearLevel);
-            for (int i = 1; i <= 20; i++) {
+            for (int i = 1; i <= mcaStudentsPerYear; i++) {
                 String fn = firstNames[rand.nextInt(firstNames.length)];
                 String ln = lastNames[rand.nextInt(lastNames.length)];
                 String rollNum = yearStr + "X1F00" + String.format("%02d", i);
@@ -498,14 +513,15 @@ public class DataSeeder implements CommandLineRunner {
 
     private void ensureStudent(StudentSpec spec, Department department, AcademicYear year) {
         if (department == null) return;
-        User user = ensureUser(spec.username, spec.password, Role.STUDENT, spec.firstName, spec.lastName, spec.email, spec.phone);
+        String normalizedUsername = spec.username != null ? spec.username.trim().toLowerCase() : "";
+        User user = ensureUser(normalizedUsername, spec.password, Role.STUDENT, spec.firstName, spec.lastName, spec.email, spec.phone);
         Student student = studentRepository.findByUser(user)
-                .map(existing -> updateStudent(existing, spec, department))
+                .map(existing -> updateStudent(existing, normalizedUsername, spec, department))
                 .orElseGet(() -> {
                     Student created = new Student();
                     created.setUser(user);
-                    created.setRollNumber(spec.username);
-                    created.setStudentId(spec.username);
+                    created.setRollNumber(normalizedUsername);
+                    created.setStudentId(normalizedUsername);
                     created.setDepartment(department.getCode());
                     created.setDepartmentEntity(department);
                     created.setProgram(spec.program != null ? spec.program.getType() : ProgramType.UG);
@@ -528,9 +544,9 @@ public class DataSeeder implements CommandLineRunner {
         }
     }
 
-    private Student updateStudent(Student student, StudentSpec spec, Department department) {
-        student.setRollNumber(spec.username);
-        student.setStudentId(spec.username);
+    private Student updateStudent(Student student, String rollNumber, StudentSpec spec, Department department) {
+        student.setRollNumber(rollNumber);
+        student.setStudentId(rollNumber);
         student.setDepartment(department.getCode());
         student.setDepartmentEntity(department);
         student.setProgram(spec.program != null ? spec.program.getType() : ProgramType.UG);
@@ -552,7 +568,7 @@ public class DataSeeder implements CommandLineRunner {
         for (FacultySubjectMap map : mappings) {
             // Create 15-20 sessions per mapping for historical analysis
             // Create 35-45 sessions per mapping (for ~2 months of classes)
-            int sessionCount = 35 + rand.nextInt(11);
+            int sessionCount = sessionsPerMapping + (sessionsPerMapping > 1 ? rand.nextInt(11) : 0);
             List<StudentClassMap> classStudents = studentClassMapRepository.findByCourseClass_IdAndAcademicYear_Id(
                     map.getCourseClass().getId(), year.getId());
 
@@ -608,9 +624,10 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private User ensureUser(String username, String password, Role role, String firstName, String lastName, String email, String phone) {
-        return userRepository.findByUsername(username)
+        String normalizedUsername = username != null ? username.trim().toLowerCase() : "";
+        return userRepository.findByUsername(normalizedUsername)
                 .map(existing -> {
-                    recordCredential(role.name(), username, password);
+                    recordCredential(role.name(), normalizedUsername, password);
                     if (existing.getContactNumber() == null || existing.getContactNumber().isEmpty()) {
                         existing.setContactNumber(phone);
                         existing.setFirstName(firstName);
@@ -621,16 +638,16 @@ public class DataSeeder implements CommandLineRunner {
                 })
                 .orElseGet(() -> {
                     User user = new User();
-                    user.setUsername(username);
+                    user.setUsername(normalizedUsername);
                     user.setPassword(passwordEncoder.encode(password));
                     user.setRole(role);
                     user.setFirstName(firstName);
                     user.setLastName(lastName);
-                    user.setEmail(email);
+                    user.setEmail(email != null ? email.trim().toLowerCase() : "");
                     user.setContactNumber(phone);
                     user.setFirstLogin(false);
                     User saved = userRepository.save(user);
-                    recordCredential(role.name(), username, password);
+                    recordCredential(role.name(), normalizedUsername, password);
                     return saved;
                 });
     }
