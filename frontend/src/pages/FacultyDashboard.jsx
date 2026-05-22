@@ -12,7 +12,7 @@ import { alpha } from "@mui/material/styles";
 import QRCode from "react-qr-code";
 import {
     getFacultyMappings, createSession, markManualAttendance,
-    refreshSessionQr, endSession, getSessionAttendanceCount,
+    refreshSessionQr, endSession, cancelSession, getSessionAttendanceCount,
     getSessionAttendance, updateAttendanceStatus,
     getFacultyDashboard, getSessionHistory, getFacultyClassStats,
     getSessionReport, crcAPI, bulkUploadAPI
@@ -280,8 +280,8 @@ const FacultyDashboard = () => {
             const mapping = getSelectedMappingInfo();
             const newSession = await createSession({ 
                 mapId: selectedMapping, 
-                latitude: loc.latitude, 
-                longitude: loc.longitude, 
+                lat: loc.latitude, 
+                lon: loc.longitude, 
                 duration, 
                 radius,
                 period: selectedPeriod,
@@ -314,6 +314,23 @@ const FacultyDashboard = () => {
             setAttendanceRecords(records);
         } catch (e) { alert("Failed to end session: " + (e.response?.data?.message || e.message)); }
         finally { setLoadingRecords(false); }
+    };
+
+    const handleCancelSession = async () => {
+        if (!session) return;
+        const sid = session?.id ?? session?.sessionId;
+        if (sid === undefined || sid === null) {
+            alert("Failed to cancel session: missing session id. Please refresh the page and try again.");
+            return;
+        }
+        if (!window.confirm("Are you sure you want to cancel this session? All attendance records for this session will be deleted and the session will be removed entirely.")) return;
+        try {
+            await cancelSession(sid);
+            setSession(null); setQrDialogOpen(false);
+            setReviewMode(false); setAttendanceRecords([]); setEndedSessionId(null);
+            setApproved(false); setSelectedClass(""); setSelectedMapping("");
+            loadDashboard();
+        } catch (e) { alert("Failed to cancel session: " + (e.response?.data?.message || e.message)); }
     };
 
     const toggleStudentStatus = (recordId) => {
@@ -671,6 +688,7 @@ const FacultyDashboard = () => {
                                 setSelectedClass={(v) => { setSelectedClass(v); setSelectedMapping(""); }}
                                 selectedMapping={selectedMapping} setSelectedMapping={setSelectedMapping}
                                 selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod}
+                                numberOfHours={numberOfHours} setNumberOfHours={setNumberOfHours}
                                 radius={radius} setRadius={setRadius} duration={duration} setDuration={setDuration}
                                 onStart={handleStartSession} starting={startingSession}
                                 locationError={locationError} gettingLocation={gettingLocation}
@@ -685,7 +703,7 @@ const FacultyDashboard = () => {
                                 attendanceCount={attendanceCount} sessionTimer={sessionTimer}
                                 formatTimer={formatTimer} onOpenQr={() => setQrDialogOpen(true)}
                                 onPopOut={handlePopOutPiP}
-                                onEnd={handleEndSession} manualRollNo={manualRollNo}
+                                onEnd={handleEndSession} onCancel={handleCancelSession} manualRollNo={manualRollNo}
                                 setManualRollNo={setManualRollNo} manualReason={manualReason}
                                 setManualReason={setManualReason} manualMessage={manualMessage}
                                 onManualSubmit={handleManualSubmit} theme={theme} isDark={isDark}
@@ -1198,7 +1216,7 @@ const FacultyDashboard = () => {
                 qrValue={qrValue} attendanceCount={attendanceCount}
                 sessionTimer={sessionTimer} formatTimer={formatTimer}
                 mappingInfo={getSelectedMappingInfo()} onEnd={handleEndSession}
-                theme={theme} isDark={isDark}
+                onCancel={handleCancelSession} theme={theme} isDark={isDark}
             />
 
             {/* SESSION REPORT DIALOG */}
@@ -1271,6 +1289,7 @@ const FacultyDashboard = () => {
 function StartSessionForm({
     uniqueClasses, filteredSubjects, selectedClass, setSelectedClass,
     selectedMapping, setSelectedMapping, selectedPeriod, setSelectedPeriod, 
+    numberOfHours, setNumberOfHours,
     radius, setRadius, duration, setDuration, onStart, starting, locationError,
     gettingLocation, loading, theme, isDark
 }) {
@@ -1429,7 +1448,7 @@ function StartSessionForm({
 // ═══════════════════════════════════════════════════════════════════════
 //  ACTIVE SESSION PANEL
 // ═══════════════════════════════════════════════════════════════════════
-function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTimer, formatTimer, onOpenQr, onPopOut, onEnd, manualRollNo, setManualRollNo, manualReason, setManualReason, manualMessage, onManualSubmit, theme, isDark }) {
+function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTimer, formatTimer, onOpenQr, onPopOut, onEnd, onCancel, manualRollNo, setManualRollNo, manualReason, setManualReason, manualMessage, onManualSubmit, theme, isDark }) {
     return (
         <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
@@ -1480,6 +1499,7 @@ function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTime
                                 <Button variant="contained" fullWidth onClick={onPopOut} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2, background: `linear-gradient(135deg, ${theme.palette.warning.main}, #F97316)`, color: '#000' }}>Pop Out ↗</Button>
                             </Stack>
                             <Button variant="outlined" color="error" fullWidth onClick={onEnd} startIcon={<StopCircleIcon />} sx={{ py: 1.5, fontWeight: 700, borderRadius: 2 }}>End Session & Review</Button>
+                            <Button variant="outlined" color="warning" fullWidth onClick={onCancel} startIcon={<CancelIcon />} sx={{ py: 1.5, fontWeight: 600, borderRadius: 2 }}>Cancel Session</Button>
                         </Stack>
                     </CardContent>
                 </Card>
@@ -1491,7 +1511,7 @@ function ActiveSessionPanel({ session, mappingInfo, attendanceCount, sessionTime
 // ═══════════════════════════════════════════════════════════════════════
 //  QR POPUP DIALOG
 // ═══════════════════════════════════════════════════════════════════════
-function QrPopupDialog({ open, onClose, qrValue, attendanceCount, sessionTimer, formatTimer, mappingInfo, onEnd, theme, isDark }) {
+function QrPopupDialog({ open, onClose, qrValue, attendanceCount, sessionTimer, formatTimer, mappingInfo, onEnd, onCancel, theme, isDark }) {
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, overflow: 'hidden' } }}>
             <Box sx={{ px: 3, py: 2, background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1527,6 +1547,7 @@ function QrPopupDialog({ open, onClose, qrValue, attendanceCount, sessionTimer, 
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3 }}>
                 <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2, fontWeight: 600 }}>Minimize</Button>
+                <Button onClick={onCancel} variant="outlined" color="warning" startIcon={<CancelIcon />} sx={{ borderRadius: 2, fontWeight: 600 }}>Cancel Session</Button>
                 <Button onClick={onEnd} variant="contained" color="error" startIcon={<StopCircleIcon />} sx={{ borderRadius: 2, fontWeight: 700 }}>End Session & Review</Button>
             </DialogActions>
         </Dialog>

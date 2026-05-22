@@ -254,13 +254,14 @@ const StudentDashboard = () => {
     };
 
     // Helper to get status badge
-    const getStatusBadge = (percentage) => {
+    const getStatusBadge = (percentage, total = 1) => {
+        if (total === 0) return { label: "N/A", color: "info" };
         if (percentage >= 75) return { label: "Safe", color: "success" };
         if (percentage >= 65) return { label: "At Risk", color: "warning" };
         return { label: "Critical", color: "error" };
     };
 
-    const status = getStatusBadge(analytics?.percentage || 0);
+    const status = getStatusBadge(analytics?.percentage || 0, analytics?.totalSessions || 0);
 
     // Sidebar menu — consistent with DashboardLayout
     const menuItems = [
@@ -297,9 +298,9 @@ const StudentDashboard = () => {
             activeSection={showScanPage ? 'scanqr' : activeSection}
             onSectionChange={handleSectionChange}
             notifications={alerts.length}
-            statusChip={status.label !== 'Safe'
-                ? { label: `${Math.round(analytics?.percentage || 0)}% Attendance`, color: status.color }
-                : { label: `${Math.round(analytics?.percentage || 0)}% Attendance`, color: 'success' }
+            statusChip={['Safe', 'N/A'].includes(status.label)
+                ? { label: `${Math.round(analytics?.percentage || 0)}% Attendance`, color: status.label === 'N/A' ? 'default' : 'success' }
+                : { label: `${Math.round(analytics?.percentage || 0)}% Attendance`, color: status.color }
             }
         >
             {showScanPage ? (
@@ -677,8 +678,8 @@ const StudentDashboard = () => {
                                     ) : (
                                         filteredSubjects.map(sub => {
                                             const pct = sub.attendancePercentage || 0;
-                                            const subStatus = getStatusBadge(pct);
                                             const total = sub.total || 0;
+                                            const subStatus = getStatusBadge(pct, total);
                                             const attended = sub.attended || 0;
                                             const absent = total - attended;
                                             

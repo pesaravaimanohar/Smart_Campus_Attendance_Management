@@ -16,7 +16,7 @@ public class Subject {
     private String code;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "VARCHAR(20) DEFAULT 'REGULAR'")
+    @Column(name = "subject_type", nullable = false, length = 20)
     private SubjectType subjectType = SubjectType.REGULAR;
 
     public Subject() {

@@ -25,9 +25,10 @@ public class AttendanceSession {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
-    private boolean isActive;
+    @Column(name = "is_active", nullable = false)
+    private boolean isActive = false;
 
-    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_lab_session", nullable = false)
     private Boolean isLabSession = false;
 
     @Column(nullable = true)
@@ -44,7 +45,7 @@ public class AttendanceSession {
 
     private String period;
 
-    @Column(nullable = false, columnDefinition = "INT DEFAULT 1")
+    @Column(name = "number_of_hours", nullable = false)
     private Integer numberOfHours = 1;
 
     public AttendanceSession() {

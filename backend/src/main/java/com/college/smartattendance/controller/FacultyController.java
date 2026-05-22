@@ -590,6 +590,17 @@ public class FacultyController {
         }
     }
 
+    @PreAuthorize("hasAnyRole('FACULTY','HOD','PRINCIPAL')")
+    @PostMapping("/sessions/{sessionId}/cancel")
+    public ResponseEntity<?> cancelSession(@PathVariable Long sessionId) {
+        try {
+            attendanceService.cancelSession(sessionId);
+            return ResponseEntity.ok(Map.of("message", "Session cancelled successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
 
     @PreAuthorize("hasAnyRole('FACULTY','HOD','PRINCIPAL')")
     @GetMapping("/sessions/{sessionId}/count")

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Use Case Diagram - AttendX System</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 10mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 297mm;
+            height: 210mm;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 14pt;
+            margin: 6mm 0 4mm 0;
+            text-align: center;
+            font-weight: 700;
+            color: #1a1a2e;
+            letter-spacing: 0.5px;
+        }
+
+        .diagram-container {
+            position: relative;
+            width: 275mm;
+            height: 185mm;
+        }
+
+        /* System boundary */
+        .system-boundary {
+            position: absolute;
+            left: 50mm;
+            top: 5mm;
+            width: 175mm;
+            height: 175mm;
+            border: 2.5px solid #2c3e50;
+            border-radius: 12px;
+            background: #fafcff;
+        }
+
+        .system-label {
+            position: absolute;
+            top: 3mm;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11pt;
+            font-weight: 700;
+            color: #2c3e50;
+            background: #fafcff;
+            padding: 0 8px;
+        }
+
+        /* Use Case Ovals */
+        .usecase {
+            position: absolute;
+            width: 48mm;
+            height: 14mm;
+            border: 1.8px solid #2980b9;
+            border-radius: 50%;
+            background: #e8f4fd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 6.5pt;
+            font-weight: 600;
+            color: #1a1a2e;
+            line-height: 1.25;
+            padding: 1mm 3mm;
+            z-index: 2;
+        }
+
+        /* Actor stick figures */
+        .actor {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 3;
+        }
+
+        .actor svg {
+            width: 18mm;
+            height: 22mm;
+        }
+
+        .actor-label {
+            font-size: 8pt;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-top: 1mm;
+            text-align: center;
+        }
+
+        /* SVG for lines */
+        .connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .connections-svg line {
+            stroke: #555;
+            stroke-width: 1;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Use Case Diagram — AttendX Smart Campus Attendance Management System</h1>
+    <div class="diagram-container" id="diagram">
+        <!-- System Boundary -->
+        <div class="system-boundary">
+            <div class="system-label">AttendX System</div>
+        </div>
+
+        <!-- Use Cases: 3 columns x 6 rows inside boundary -->
+        <!-- Column positions: 58mm, 112mm, 168mm -->
+        <!-- Row positions: 20mm, 46mm, 72mm, 98mm, 124mm, 150mm (top of oval) -->
+
+        <div class="usecase" id="uc1"  style="left:58mm;  top:17mm;">Login /<br>Authenticate</div>
+        <div class="usecase" id="uc2"  style="left:112mm; top:17mm;">Change<br>Password</div>
+        <div class="usecase" id="uc3"  style="left:168mm; top:17mm;">Start Attendance<br>Session</div>
+
+        <div class="usecase" id="uc4"  style="left:58mm;  top:43mm;">Display<br>QR Code</div>
+        <div class="usecase" id="uc5"  style="left:112mm; top:43mm;">Refresh<br>QR Token</div>
+        <div class="usecase" id="uc6"  style="left:168mm; top:43mm;">End<br>Session</div>
+
+        <div class="usecase" id="uc7"  style="left:58mm;  top:69mm;">Manual Override<br>Attendance</div>
+        <div class="usecase" id="uc8"  style="left:112mm; top:69mm;">Scan<br>QR Code</div>
+        <div class="usecase" id="uc9"  style="left:168mm; top:69mm;">View Attendance<br>Analytics</div>
+
+        <div class="usecase" id="uc10" style="left:58mm;  top:95mm;">View<br>Alerts</div>
+        <div class="usecase" id="uc11" style="left:112mm; top:95mm;">Manage Academic<br>Hierarchy</div>
+        <div class="usecase" id="uc12" style="left:168mm; top:95mm;">Manage Faculty-<br>Subject Mapping</div>
+
+        <div class="usecase" id="uc13" style="left:58mm;  top:121mm;">Bulk Upload<br>Data</div>
+        <div class="usecase" id="uc14" style="left:112mm; top:121mm;">View Department<br>Reports</div>
+        <div class="usecase" id="uc15" style="left:168mm; top:121mm;">View College-<br>Wide Reports</div>
+
+        <div class="usecase" id="uc16" style="left:58mm;  top:147mm;">Monitor At-Risk<br>Students</div>
+        <div class="usecase" id="uc17" style="left:112mm; top:147mm;">Promote<br>Students</div>
+        <div class="usecase" id="uc18" style="left:168mm; top:147mm;">Upload Timetable<br>/ Syllabus</div>
+
+        <!-- Actors — Left Side -->
+        <div class="actor" id="student" style="left:4mm; top:8mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">Student</div>
+        </div>
+
+        <div class="actor" id="faculty" style="left:4mm; top:60mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">Faculty</div>
+        </div>
+
+        <div class="actor" id="hod" style="left:4mm; top:120mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">HOD</div>
+        </div>
+
+        <!-- Actors — Right Side -->
+        <div class="actor" id="principal" style="left:232mm; top:8mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">Principal</div>
+        </div>
+
+        <div class="actor" id="admin" style="left:232mm; top:68mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">Admin</div>
+        </div>
+
+        <div class="actor" id="crc" style="left:232mm; top:130mm;">
+            <svg viewBox="0 0 60 80">
+                <circle cx="30" cy="12" r="10" fill="none" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="22" x2="30" y2="52" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="10" y1="35" x2="50" y2="35" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="12" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+                <line x1="30" y1="52" x2="48" y2="75" stroke="#2c3e50" stroke-width="2.5"/>
+            </svg>
+            <div class="actor-label">CRC</div>
+        </div>
+
+        <!-- Connection Lines SVG -->
+        <svg class="connections-svg" id="linesSvg"></svg>
+    </div>
+
+    <script>
+        // mm to px conversion (96 dpi: 1mm ≈ 3.7795px)
+        const mmToPx = 3.7795;
+
+        // Actor anchor points (center of stick figure body, in mm)
+        const actors = {
+            student:   { x: 13,  y: 25 },   // right side of student
+            faculty:   { x: 13,  y: 77 },
+            hod:       { x: 13,  y: 137 },
+            principal: { x: 241, y: 25 },   // left side of principal
+            admin:     { x: 241, y: 85 },
+            crc:       { x: 241, y: 147 },
+        };
+
+        // Use case centers (left + width/2, top + height/2) in mm
+        const usecases = {
+            uc1:  { x: 58  + 24, y: 17  + 7 },
+            uc2:  { x: 112 + 24, y: 17  + 7 },
+            uc3:  { x: 168 + 24, y: 17  + 7 },
+            uc4:  { x: 58  + 24, y: 43  + 7 },
+            uc5:  { x: 112 + 24, y: 43  + 7 },
+            uc6:  { x: 168 + 24, y: 43  + 7 },
+            uc7:  { x: 58  + 24, y: 69  + 7 },
+            uc8:  { x: 112 + 24, y: 69  + 7 },
+            uc9:  { x: 168 + 24, y: 69  + 7 },
+            uc10: { x: 58  + 24, y: 95  + 7 },
+            uc11: { x: 112 + 24, y: 95  + 7 },
+            uc12: { x: 168 + 24, y: 95  + 7 },
+            uc13: { x: 58  + 24, y: 121 + 7 },
+            uc14: { x: 112 + 24, y: 121 + 7 },
+            uc15: { x: 168 + 24, y: 121 + 7 },
+            uc16: { x: 58  + 24, y: 147 + 7 },
+            uc17: { x: 112 + 24, y: 147 + 7 },
+            uc18: { x: 168 + 24, y: 147 + 7 },
+        };
+
+        // Connections: actor -> list of use cases
+        const connections = {
+            student:   ['uc1', 'uc2', 'uc8', 'uc9', 'uc10'],
+            faculty:   ['uc1', 'uc3', 'uc4', 'uc5', 'uc6', 'uc7', 'uc9'],
+            hod:       ['uc1', 'uc12', 'uc14', 'uc16'],
+            principal: ['uc1', 'uc15'],
+            admin:     ['uc1', 'uc11', 'uc12', 'uc13', 'uc17', 'uc18'],
+            crc:       ['uc1', 'uc9', 'uc16'],
+        };
+
+        // Color palette for actor connection lines
+        const colors = {
+            student:   '#e74c3c',
+            faculty:   '#2980b9',
+            hod:       '#27ae60',
+            principal: '#8e44ad',
+            admin:     '#e67e22',
+            crc:       '#16a085',
+        };
+
+        const svg = document.getElementById('linesSvg');
+
+        // Ellipse semi-axes in mm
+        const ew = 24; // width/2
+        const eh = 7;  // height/2
+
+        function ellipseEdge(cx, cy, px, py) {
+            const dx = px - cx;
+            const dy = py - cy;
+            const angle = Math.atan2(dy, dx);
+            return {
+                x: cx + ew * Math.cos(angle),
+                y: cy + eh * Math.sin(angle)
+            };
+        }
+
+        for (const [actor, ucs] of Object.entries(connections)) {
+            const a = actors[actor];
+            for (const uc of ucs) {
+                const u = usecases[uc];
+                const edge = ellipseEdge(u.x, u.y, a.x, a.y);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', a.x * mmToPx);
+                line.setAttribute('y1', a.y * mmToPx);
+                line.setAttribute('x2', edge.x * mmToPx);
+                line.setAttribute('y2', edge.y * mmToPx);
+                line.setAttribute('stroke', colors[actor]);
+                line.setAttribute('stroke-width', '1.2');
+                line.setAttribute('opacity', '0.75');
+                svg.appendChild(line);
+            }
+        }
+
+        // Add legend
+        const legend = document.createElement('div');
+        legend.style.cssText = 'position:absolute;bottom:2mm;left:55mm;display:flex;gap:12mm;font-size:7pt;font-weight:600;';
+        for (const [actor, color] of Object.entries(colors)) {
+            const item = document.createElement('span');
+            item.innerHTML = `<span style="display:inline-block;width:8mm;height:2mm;background:${color};margin-right:2mm;vertical-align:middle;opacity:0.75;"></span>${actor.charAt(0).toUpperCase() + actor.slice(1)}`;
+            legend.appendChild(item);
+        }
+        document.getElementById('diagram').appendChild(legend);
+    </script>
+</body>
+</html>

@@ -146,6 +146,14 @@ export const endSession = async (sessionId) => {
     return response.data;
 };
 
+export const cancelSession = async (sessionId) => {
+    if (sessionId === undefined || sessionId === null || sessionId === '' || sessionId === 'undefined') {
+        throw new Error('Invalid session id. Please refresh and try again.');
+    }
+    const response = await apiClient.post(`/faculty/sessions/${sessionId}/cancel`);
+    return response.data;
+};
+
 export const getSessionAttendanceCount = async (sessionId) => {
     const response = await apiClient.get(`/faculty/sessions/${sessionId}/count`);
     return response.data;

@@ -798,4 +798,21 @@ public class AttendanceService {
 
                 return sessionRepository.save(session);
         }
+
+        /**
+         * Cancel a session — deactivates the session and removes all attendance records.
+         * Unlike endSession, this does NOT mark absentees. The session is treated as if it never happened.
+         */
+        @Transactional
+        public void cancelSession(Long sessionId) {
+                AttendanceSession session = sessionRepository.findById(sessionId)
+                                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                // Delete all attendance records for this session
+                List<AttendanceRecord> records = recordRepository.findBySession(session);
+                recordRepository.deleteAll(records);
+
+                // Delete the session itself
+                sessionRepository.delete(session);
+        }
 }

@@ -34,7 +34,7 @@ public class BulkUploadLog {
     @Column(nullable = false, length = 50)
     private UploadStatus status;
 
-    @Column(name = "error_summary", columnDefinition = "LONGTEXT")
+    @Column(name = "error_summary", columnDefinition = "TEXT")
     private String errorSummary;
 
     @Column(name = "uploaded_at", nullable = false)

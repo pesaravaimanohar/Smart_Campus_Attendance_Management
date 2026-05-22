@@ -135,4 +135,3 @@ npm run dev
 *   **Excel Templates**: Standard templates for bulk upload are located in the root directory.
 
 ---
-*Developed with ❤️ for Advanced Agentic Coding.*

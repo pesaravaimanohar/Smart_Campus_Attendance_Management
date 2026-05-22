@@ -23,3 +23,7 @@ backend/.m2/
 backend/src/main/resources/application-local.properties
 seeded-users.txt
 backend/seeded-users.txt
+supabase.txt
+migrate.py
+__pycache__/
+*.pyc
