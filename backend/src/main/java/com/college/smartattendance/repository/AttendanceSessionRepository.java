@@ -23,5 +23,11 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
            "(s.facultySubjectMap.faculty.id = :facultyId OR s.createdByFacultyId = :facultyId) " +
            "ORDER BY s.startTime DESC")
     List<AttendanceSession> findActiveSessionsByFaculty(@org.springframework.data.repository.query.Param("facultyId") Long facultyId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM AttendanceSession s WHERE s.courseClass.id IN :classIds " +
+           "AND CAST(s.startTime AS date) = :date")
+    List<AttendanceSession> findSessionsByClassesAndDate(
+            @org.springframework.data.repository.query.Param("classIds") java.util.Collection<Long> classIds,
+            @org.springframework.data.repository.query.Param("date") java.time.LocalDate date);
 }
 

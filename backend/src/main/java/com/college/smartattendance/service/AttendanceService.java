@@ -361,7 +361,22 @@ public class AttendanceService {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
-                long[] stats = getStudentAttendanceStats(student, null);
+                List<AttendanceRecord> studentRecords = recordRepository.findByStudent(student);
+                java.util.Map<Long, AttendanceRecord> recordMap = new java.util.HashMap<>();
+                for (AttendanceRecord rec : studentRecords) {
+                        if (rec.getSession() != null) {
+                                recordMap.put(rec.getSession().getId(), rec);
+                        }
+                }
+
+                List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(student.getId());
+                java.util.Map<Long, List<AttendanceSession>> classSessionsMap = new java.util.HashMap<>();
+                for (StudentClassMap scm : classMaps) {
+                        Long classId = scm.getCourseClass().getId();
+                        classSessionsMap.put(classId, sessionRepository.findByCourseClass_Id(classId));
+                }
+
+                long[] stats = getStudentAttendanceStats(student, null, recordMap, classSessionsMap, classMaps);
                 long totalSessions = stats[0];
                 long totalPresent = stats[1];
 
@@ -377,13 +392,37 @@ public class AttendanceService {
         }
 
         private long[] getStudentAttendanceStats(Student student, Long subjectId) {
+                List<AttendanceRecord> studentRecords = recordRepository.findByStudent(student);
+                java.util.Map<Long, AttendanceRecord> recordMap = new java.util.HashMap<>();
+                for (AttendanceRecord rec : studentRecords) {
+                        if (rec.getSession() != null) {
+                                recordMap.put(rec.getSession().getId(), rec);
+                        }
+                }
+
                 List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(student.getId());
+                java.util.Map<Long, List<AttendanceSession>> classSessionsMap = new java.util.HashMap<>();
+                for (StudentClassMap scm : classMaps) {
+                        Long classId = scm.getCourseClass().getId();
+                        classSessionsMap.put(classId, sessionRepository.findByCourseClass_Id(classId));
+                }
+
+                return getStudentAttendanceStats(student, subjectId, recordMap, classSessionsMap, classMaps);
+        }
+
+        private long[] getStudentAttendanceStats(Student student, Long subjectId,
+                        java.util.Map<Long, AttendanceRecord> recordMap,
+                        java.util.Map<Long, List<AttendanceSession>> classSessionsMap,
+                        List<StudentClassMap> classMaps) {
                 long totalSessions = 0;
                 long totalPresent = 0;
 
                 for (StudentClassMap scm : classMaps) {
                         Long classId = scm.getCourseClass().getId();
-                        List<AttendanceSession> sessions = sessionRepository.findByCourseClass_Id(classId);
+                        List<AttendanceSession> sessions = classSessionsMap.get(classId);
+                        if (sessions == null) {
+                                continue;
+                        }
 
                         for (AttendanceSession session : sessions) {
                                 // Subject filter
@@ -405,26 +444,23 @@ public class AttendanceService {
                                 }
 
                                 int hours = session.getNumberOfHours() != null ? session.getNumberOfHours() : 1;
-                                Optional<AttendanceRecord> rec = recordRepository.findBySessionAndStudent(session,
-                                                student);
+                                AttendanceRecord rec = recordMap.get(session.getId());
 
                                 boolean isTrulyActive = session.isActive()
                                                 && LocalDateTime.now().isBefore(session.getEndTime());
 
                                 if (isTrulyActive) {
                                         // For active sessions, only count if student marked present
-                                        if (rec.isPresent() && (rec.get().getStatus() == AttendanceStatus.PRESENT
-                                                        || rec.get()
-                                                                        .getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
+                                        if (rec != null && (rec.getStatus() == AttendanceStatus.PRESENT
+                                                        || rec.getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
                                                 totalSessions += hours;
                                                 totalPresent += hours;
                                         }
                                 } else {
                                         // For ended or expired sessions, they always count towards total
                                         totalSessions += hours;
-                                        if (rec.isPresent() && (rec.get().getStatus() == AttendanceStatus.PRESENT
-                                                        || rec.get()
-                                                                        .getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
+                                        if (rec != null && (rec.getStatus() == AttendanceStatus.PRESENT
+                                                        || rec.getStatus() == AttendanceStatus.MANUAL_VERIFIED)) {
                                                 totalPresent += hours;
                                         }
                                 }
@@ -447,7 +483,6 @@ public class AttendanceService {
                 double distance = R * c * 1000; // convert to meters
                 return distance;
         }
-
         public List<java.util.Map<String, Object>> getStudentSubjects(Long studentId) {
                 Student student = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
@@ -455,8 +490,11 @@ public class AttendanceService {
                 // Get all subjects assigned to student's class
                 List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(student.getId());
                 java.util.Map<Long, Subject> subjectMap = new java.util.HashMap<>();
+                
+                java.util.Map<Long, List<AttendanceSession>> classSessionsMap = new java.util.HashMap<>();
                 for (StudentClassMap scm : classMaps) {
                         Long classId = scm.getCourseClass().getId();
+                        classSessionsMap.put(classId, sessionRepository.findByCourseClass_Id(classId));
                         
                         // 1. Regular subjects
                         List<FacultySubjectMap> fsms = facultySubjectMapRepository.findByCourseClass_Id(classId);
@@ -473,9 +511,17 @@ public class AttendanceService {
                         }
                 }
 
+                List<AttendanceRecord> studentRecords = recordRepository.findByStudent(student);
+                java.util.Map<Long, AttendanceRecord> recordMap = new java.util.HashMap<>();
+                for (AttendanceRecord rec : studentRecords) {
+                        if (rec.getSession() != null) {
+                                recordMap.put(rec.getSession().getId(), rec);
+                        }
+                }
+
                 java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
                 for (Subject subject : subjectMap.values()) {
-                        long[] stats = getStudentAttendanceStats(student, subject.getId());
+                        long[] stats = getStudentAttendanceStats(student, subject.getId(), recordMap, classSessionsMap, classMaps);
                         long total = stats[0];
                         long attended = stats[1];
                         double pct = total == 0 ? 0 : Math.round(((double) attended / total) * 100.0 * 10) / 10.0;
@@ -494,8 +540,6 @@ public class AttendanceService {
                 result.sort((a, b) -> ((String) a.get("name")).compareTo((String) b.get("name")));
                 return result;
         }
-
-
         public com.college.smartattendance.dto.SubjectAttendanceDto getSubjectAttendance(Long studentId,
                         Long subjectId) {
                 Student student = studentRepository.findById(studentId)
@@ -556,10 +600,25 @@ public class AttendanceService {
                                 .orElseThrow(() -> new RuntimeException("Student not found"));
 
                 java.time.LocalDate today = java.time.LocalDate.now();
-                List<AttendanceSession> allSessions = sessionRepository.findAll();
+                List<StudentClassMap> classMaps = studentClassMapRepository.findByStudent_Id(studentId);
+                if (classMaps.isEmpty()) {
+                        return java.util.Collections.emptyList();
+                }
+                List<Long> classIds = classMaps.stream()
+                                .map(scm -> scm.getCourseClass().getId())
+                                .collect(java.util.stream.Collectors.toList());
 
-                return allSessions.stream()
-                                .filter(session -> session.getStartTime().toLocalDate().equals(today))
+                List<AttendanceSession> sessions = sessionRepository.findSessionsByClassesAndDate(classIds, today);
+
+                List<AttendanceRecord> todayRecords = recordRepository.findByStudent(student);
+                java.util.Map<Long, AttendanceRecord> recordMap = new java.util.HashMap<>();
+                for (AttendanceRecord r : todayRecords) {
+                        if (r.getSession() != null) {
+                                recordMap.put(r.getSession().getId(), r);
+                        }
+                }
+
+                return sessions.stream()
                                 .map(session -> {
                                         com.college.smartattendance.dto.TodaySessionDto dto = new com.college.smartattendance.dto.TodaySessionDto();
                                         dto.setSessionId(session.getId());
@@ -597,8 +656,7 @@ public class AttendanceService {
                                                 dto.setStatus("Open");
                                         }
 
-                                        boolean hasMarked = recordRepository.findBySessionAndStudent(session, student)
-                                                        .isPresent();
+                                        boolean hasMarked = recordMap.containsKey(session.getId());
                                         dto.setHasMarkedAttendance(hasMarked);
 
                                         return dto;
@@ -695,12 +753,25 @@ public class AttendanceService {
                 }
 
                 java.time.LocalDate yesterday = java.time.LocalDate.now().minusDays(1);
-                List<AttendanceSession> yesterdaySessions = sessionRepository.findAll().stream()
-                                .filter(s -> s.getStartTime().toLocalDate().equals(yesterday))
-                                .collect(java.util.stream.Collectors.toList());
+                List<AttendanceSession> yesterdaySessions = java.util.Collections.emptyList();
+                List<StudentClassMap> studentClassMaps = studentClassMapRepository.findByStudent_Id(studentId);
+                if (!studentClassMaps.isEmpty()) {
+                        List<Long> classIds = studentClassMaps.stream()
+                                        .map(scm -> scm.getCourseClass().getId())
+                                        .collect(java.util.stream.Collectors.toList());
+                        yesterdaySessions = sessionRepository.findSessionsByClassesAndDate(classIds, yesterday);
+                }
+
+                List<AttendanceRecord> studentRecords = recordRepository.findByStudent(student);
+                java.util.Map<Long, AttendanceRecord> recordMap = new java.util.HashMap<>();
+                for (AttendanceRecord r : studentRecords) {
+                        if (r.getSession() != null) {
+                                recordMap.put(r.getSession().getId(), r);
+                        }
+                }
 
                 for (AttendanceSession session : yesterdaySessions) {
-                        boolean marked = recordRepository.findBySessionAndStudent(session, student).isPresent();
+                        boolean marked = recordMap.containsKey(session.getId());
                         if (!marked) {
                              String subName = session.getFacultySubjectMap() != null ? session.getFacultySubjectMap().getSubject().getName()
                                                     : (session.getLabSubject() != null ? session.getLabSubject().getName() : "Lab");
