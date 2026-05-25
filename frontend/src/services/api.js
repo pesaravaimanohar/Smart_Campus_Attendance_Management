@@ -1,7 +1,14 @@
 import axios from 'axios';
 
 // API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+let base = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+// Remove any trailing slashes
+base = base.replace(/\/+$/, '');
+// Ensure it ends with /api
+if (!base.endsWith('/api')) {
+    base = base + '/api';
+}
+const API_BASE_URL = base;
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -151,6 +158,11 @@ export const cancelSession = async (sessionId) => {
         throw new Error('Invalid session id. Please refresh and try again.');
     }
     const response = await apiClient.post(`/faculty/sessions/${sessionId}/cancel`);
+    return response.data;
+};
+
+export const getActiveSession = async () => {
+    const response = await apiClient.get('/faculty/sessions/active');
     return response.data;
 };
 

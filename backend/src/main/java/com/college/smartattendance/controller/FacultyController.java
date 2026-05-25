@@ -604,6 +604,62 @@ public class FacultyController {
         }
     }
 
+    @PreAuthorize("hasAnyRole('FACULTY','HOD','PRINCIPAL')")
+    @GetMapping("/sessions/active")
+    public ResponseEntity<?> getActiveSession(Principal principal) {
+        try {
+            Faculty faculty = facultyService.getFacultyByUsername(principal.getName());
+            List<AttendanceSession> activeSessions = attendanceSessionRepository.findActiveSessionsByFaculty(faculty.getId());
+            if (activeSessions.isEmpty()) {
+                return ResponseEntity.ok(Map.of("active", false));
+            }
+            
+            AttendanceSession session = activeSessions.get(0);
+            
+            // Check if it has expired naturally by time
+            if (LocalDateTime.now().isAfter(session.getEndTime())) {
+                try {
+                    attendanceService.endSession(session.getId());
+                } catch (Exception e) {
+                    session.setActive(false);
+                    attendanceSessionRepository.save(session);
+                }
+                return ResponseEntity.ok(Map.of("active", false));
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("active", true);
+            response.put("sessionId", session.getId());
+            response.put("qrToken", session.getQrToken());
+            response.put("startTime", session.getStartTime());
+            response.put("endTime", session.getEndTime());
+            response.put("radius", session.getRadius());
+            response.put("latitude", session.getLatitude());
+            response.put("longitude", session.getLongitude());
+            response.put("period", session.getPeriod() != null ? session.getPeriod() : "N/A");
+            response.put("numberOfHours", session.getNumberOfHours() != null ? session.getNumberOfHours() : 1);
+            
+            response.put("isLab", Boolean.TRUE.equals(session.getIsLabSession()));
+            if (session.getFacultySubjectMap() != null) {
+                response.put("mapId", session.getFacultySubjectMap().getId());
+                response.put("subjectName", session.getFacultySubjectMap().getSubject().getName());
+                response.put("subjectCode", session.getFacultySubjectMap().getSubject().getCode());
+                response.put("className", session.getFacultySubjectMap().getCourseClass().getName());
+                response.put("section", session.getFacultySubjectMap().getSection());
+            } else {
+                response.put("mapId", session.getId());
+                response.put("subjectName", session.getLabSubject() != null ? session.getLabSubject().getName() : "Lab");
+                response.put("subjectCode", session.getLabSubject() != null ? session.getLabSubject().getCode() : "LAB");
+                response.put("className", session.getCourseClass() != null ? session.getCourseClass().getName() : "Lab Session");
+                response.put("section", "LAB");
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
 
     @PreAuthorize("hasAnyRole('FACULTY','HOD','PRINCIPAL')")
     @GetMapping("/sessions/{sessionId}/count")

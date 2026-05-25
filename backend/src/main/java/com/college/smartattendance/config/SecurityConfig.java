@@ -29,7 +29,7 @@ public class SecurityConfig {
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174}") String allowedOrigins) {
+            @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174,https://smart-campus-attendance-management.vercel.app,https://*.vercel.app}") String allowedOrigins) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
@@ -74,13 +74,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // If any endpoint/controller uses wildcard origins, we must use allowedOriginPatterns
-        // when credentials are enabled, otherwise Spring will reject "*" with allowCredentials(true).
-        if (allowedOrigins.stream().anyMatch(o -> "*".equals(o))) {
-            configuration.setAllowedOriginPatterns(List.of("*"));
-        } else {
-            configuration.setAllowedOrigins(allowedOrigins);
-        }
+        // Use allowedOriginPatterns to support both wildcard patterns (e.g. https://*.vercel.app)
+        // and exact origins, which is required when allowCredentials(true) is set.
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

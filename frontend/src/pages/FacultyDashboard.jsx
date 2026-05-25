@@ -15,7 +15,7 @@ import {
     refreshSessionQr, endSession, cancelSession, getSessionAttendanceCount,
     getSessionAttendance, updateAttendanceStatus,
     getFacultyDashboard, getSessionHistory, getFacultyClassStats,
-    getSessionReport, crcAPI, bulkUploadAPI
+    getSessionReport, crcAPI, bulkUploadAPI, getActiveSession
 } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -51,6 +51,7 @@ import {
     CloudUpload as UploadIcon,
     Download as DownloadIcon,
     InsertDriveFile as FileIcon,
+    Delete as DeleteIcon,
 } from '@mui/icons-material';
 import DashboardLayout from '../components/DashboardLayout';
 import StatsCard from '../components/StatsCard';
@@ -138,6 +139,7 @@ const FacultyDashboard = () => {
     useEffect(() => {
         loadDashboard();
         loadMappings();
+        checkActiveSession();
     }, []);
 
     useEffect(() => {
@@ -145,6 +147,27 @@ const FacultyDashboard = () => {
         if (activeSection === 'classes' && classStats.length === 0) loadClassStats();
         if (activeSection === 'reports' && classStats.length === 0) loadClassStats();
     }, [activeSection]);
+
+    const checkActiveSession = async () => {
+        try {
+            const active = await getActiveSession();
+            if (active && active.active) {
+                const normalized = {
+                    ...active,
+                    id: active.sessionId,
+                };
+                setSession(normalized);
+                if (active.className) {
+                    setSelectedClass(active.className);
+                }
+                if (active.mapId) {
+                    setSelectedMapping(String(active.mapId));
+                }
+            }
+        } catch (e) {
+            console.error("Error checking active session:", e);
+        }
+    };
 
     const loadDashboard = async () => {
         setDashboardLoading(true);
@@ -234,7 +257,14 @@ const FacultyDashboard = () => {
             const sid = session?.id ?? session?.sessionId;
             setQrValue(session.qrToken || `SESSION:${sid ?? ''}`);
             console.log("Current Session Token:", session.qrToken);
-            setSessionTimer(0);
+            if (session.startTime) {
+                const start = new Date(session.startTime).getTime();
+                const now = new Date().getTime();
+                const diff = Math.max(0, Math.floor((now - start) / 1000));
+                setSessionTimer(diff);
+            } else {
+                setSessionTimer(0);
+            }
             qrInterval = setInterval(async () => {
                 try {
                     const id = (session?.id ?? session?.sessionId);
@@ -331,6 +361,21 @@ const FacultyDashboard = () => {
             setApproved(false); setSelectedClass(""); setSelectedMapping("");
             loadDashboard();
         } catch (e) { alert("Failed to cancel session: " + (e.response?.data?.message || e.message)); }
+    };
+
+    const handleDeleteHistorySession = async (sid) => {
+        if (sid === undefined || sid === null) {
+            alert("Failed to delete session: missing session id.");
+            return;
+        }
+        if (!window.confirm("Are you sure you want to permanently delete this session? All attendance records for this session will be deleted and this cannot be undone.")) return;
+        try {
+            await cancelSession(sid);
+            loadHistory();
+            loadDashboard();
+        } catch (e) {
+            alert("Failed to delete session: " + (e.response?.data?.message || e.message));
+        }
     };
 
     const toggleStudentStatus = (recordId) => {
@@ -699,7 +744,7 @@ const FacultyDashboard = () => {
                         {/* ACTIVE SESSION PANEL */}
                         {session && (
                             <ActiveSessionPanel
-                                session={session} mappingInfo={getSelectedMappingInfo()}
+                                session={session} mappingInfo={getSelectedMappingInfo() || session}
                                 attendanceCount={attendanceCount} sessionTimer={sessionTimer}
                                 formatTimer={formatTimer} onOpenQr={() => setQrDialogOpen(true)}
                                 onPopOut={handlePopOutPiP}
@@ -890,11 +935,18 @@ const FacultyDashboard = () => {
                                                         />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Tooltip title="View Report">
-                                                            <IconButton size="small" color="primary" onClick={() => openReport(s.sessionId)}>
-                                                                <ViewIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
+                                                        <Stack direction="row" spacing={0.5}>
+                                                            <Tooltip title="View Report">
+                                                                <IconButton size="small" color="primary" onClick={() => openReport(s.sessionId)}>
+                                                                    <ViewIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Delete Session">
+                                                                <IconButton size="small" color="error" onClick={() => handleDeleteHistorySession(s.sessionId)}>
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </Stack>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -1215,7 +1267,7 @@ const FacultyDashboard = () => {
                 open={qrDialogOpen} onClose={() => setQrDialogOpen(false)}
                 qrValue={qrValue} attendanceCount={attendanceCount}
                 sessionTimer={sessionTimer} formatTimer={formatTimer}
-                mappingInfo={getSelectedMappingInfo()} onEnd={handleEndSession}
+                mappingInfo={getSelectedMappingInfo() || session} onEnd={handleEndSession}
                 onCancel={handleCancelSession} theme={theme} isDark={isDark}
             />
 

@@ -45,6 +45,9 @@ public class AttendanceService {
         @Autowired
         private StudentAlertRepository studentAlertRepository;
 
+        @Autowired
+        private ManualOverrideLogRepository manualOverrideLogRepository;
+
         @Transactional
         public AttendanceSession createSession(Long facultySubjectMapId, Double lat, Double lon,
                         Integer durationMinutes,
@@ -852,6 +855,10 @@ public class AttendanceService {
         public void cancelSession(Long sessionId) {
                 AttendanceSession session = sessionRepository.findById(sessionId)
                                 .orElseThrow(() -> new RuntimeException("Session not found"));
+
+                // Delete all manual override logs for this session
+                List<ManualOverrideLog> overrideLogs = manualOverrideLogRepository.findBySession(session);
+                manualOverrideLogRepository.deleteAll(overrideLogs);
 
                 // Delete all attendance records for this session
                 List<AttendanceRecord> records = recordRepository.findBySession(session);
